@@ -1,14 +1,15 @@
-const CACHE_NAME = 'neocheckx-v1.4.0'; // Nome do cache atualizado
+const CACHE_NAME = 'neocheckx-v1.5.0'; // Updated version
 const urlsToCache = [
   '/NeoCheckX/app/',
   '/NeoCheckX/app/index.html',
   '/NeoCheckX/app/manifest.json',
   '/NeoCheckX/relatorios.json',
+  '/NeoCheckX/favicon.ico',
   'https://unpkg.com/react@18.2.0/umd/react.production.min.js',
   'https://unpkg.com/react-dom@18.2.0/umd/react-dom.production.min.js',
   'https://unpkg.com/@babel/standalone/babel.min.js',
   'https://cdn.tailwindcss.com',
-  'https://unpkg.com/lucide@latest' // Adicionado Lucide ao cache
+  'https://unpkg.com/lucide@latest'
 ];
 
 self.addEventListener('install', event => {
@@ -16,7 +17,12 @@ self.addEventListener('install', event => {
     caches.open(CACHE_NAME)
       .then(cache => {
         console.log('Cache aberto');
-        return cache.addAll(urlsToCache);
+        const cachePromises = urlsToCache.map(urlToCache => {
+            return cache.add(new Request(urlToCache, {cache: 'reload'})).catch(err => {
+                console.warn(`Falha ao cachear ${urlToCache}:`, err);
+            });
+        });
+        return Promise.all(cachePromises);
       })
   );
   self.skipWaiting();
@@ -35,22 +41,15 @@ self.addEventListener('activate', event => {
 });
 
 self.addEventListener('fetch', event => {
-  // Estratégia: Network First para relatorios.json, Cache First para o resto
   const requestUrl = new URL(event.request.url);
 
+  // Network First for critical config file
   if (requestUrl.pathname.endsWith('/relatorios.json')) {
     event.respondWith(
-      fetch(event.request)
-        .then(response => {
-          const responseToCache = response.clone();
-          caches.open(CACHE_NAME).then(cache => {
-            cache.put(event.request, responseToCache);
-          });
-          return response;
-        })
-        .catch(() => caches.match(event.request))
+      fetch(event.request).catch(() => caches.match(event.request))
     );
   } else {
+    // Cache First for app shell and libraries
     event.respondWith(
       caches.match(event.request)
         .then(response => {
