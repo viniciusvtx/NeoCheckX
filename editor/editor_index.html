@@ -68,7 +68,6 @@
           const [modal, setModal] = useState(null);
           const [relatorioSelecionado, setRelatorioSelecionado] = useState(null);
           const [versaoSelecionada, setVersaoSelecionada] = useState(null);
-          const [modoVisualizacao, setModoVisualizacao] = useState('editor');
           const [editandoPergunta, setEditandoPergunta] = useState(null);
           const fileInputRef = useRef(null);
           
@@ -88,6 +87,29 @@
             setVersaoSelecionada("1.0.0");
           };
           
+          const removerRelatorio = (idParaRemover) => {
+            setModal({
+                title: 'Confirmar Exclusão',
+                message: `Deseja realmente excluir o relatório "${config.relatorios[idParaRemover].versoes[config.relatorios[idParaRemover].versao_atual].titulo}"?`,
+                confirm: true,
+                onConfirm: () => {
+                    setConfig(prev => {
+                        const novosRelatorios = {...prev.relatorios};
+                        delete novosRelatorios[idParaRemover];
+                        return {...prev, relatorios: novosRelatorios};
+                    });
+                }
+            });
+          };
+
+          const atualizarDadosRelatorio = (updates) => {
+            setConfig(prev => {
+                const newState = JSON.parse(JSON.stringify(prev));
+                newState.relatorios[relatorioSelecionado] = { ...newState.relatorios[relatorioSelecionado], ...updates };
+                return newState;
+            });
+          };
+          
           const atualizarVersao = (updates) => {
             setConfig(prev => {
                 const newState = JSON.parse(JSON.stringify(prev));
@@ -103,14 +125,13 @@
               const perguntasAtuais = config.relatorios[relatorioSelecionado].versoes[versaoSelecionada].perguntas;
               const atualizarRecursivo = (perguntas) => perguntas.map(p => {
                   if (p.id === perguntaId) return { ...p, ...updates };
-                  // Incluir lógica para perguntas condicionais se necessário no futuro
                   return p;
               });
               atualizarVersao({ perguntas: atualizarRecursivo(perguntasAtuais) });
           };
           
           const adicionarPergunta = () => {
-            const novaPergunta = { id: `p_${Date.now()}`, tipo: 'texto_curto', texto: 'Nova Pergunta', obrigatorio: false };
+            const novaPergunta = { id: `p_${Date.now()}`, tipo: 'texto_curto', texto: 'Nova Pergunta', obrigatorio: true };
             const perguntasAtuais = config.relatorios[relatorioSelecionado].versoes[versaoSelecionada].perguntas;
             let perguntasAtualizadas = [...perguntasAtuais, novaPergunta];
             atualizarVersao({ perguntas: perguntasAtualizadas });
@@ -250,16 +271,21 @@
                                     <p className="text-sm">Clique em "Criar Relatório" ou "Importar" para começar.</p>
                                 </div>
                             ) : (
-                                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                                     {Object.entries(config.relatorios).map(([id, rel]) => {
                                         const versao = rel.versoes[rel.versao_atual];
                                         return (
-                                            <div key={id} onClick={() => { setRelatorioSelecionado(id); setVersaoSelecionada(rel.versao_atual); }}
-                                                className="p-4 rounded-lg border-2 border-transparent hover:border-red-500 hover:bg-red-50 cursor-pointer transition-all bg-gray-50">
-                                                <div className="font-semibold text-gray-800">{versao.titulo}</div>
-                                                <p className="text-sm text-gray-600 mt-1 truncate">{versao.descricao}</p>
-                                                <div className="text-xs text-gray-500 mt-3 pt-3 border-t">
-                                                    v{rel.versao_atual} • {versao.perguntas.length} perguntas
+                                            <div key={id} className="rounded-lg bg-gray-50 border flex flex-col justify-between">
+                                                <div className="p-4">
+                                                    <div className="font-semibold text-gray-800">{versao.titulo}</div>
+                                                    <p className="text-sm text-gray-600 mt-1 h-10">{versao.descricao}</p>
+                                                </div>
+                                                <div className="text-xs text-gray-500 p-4 mt-2 border-t flex justify-between items-center">
+                                                    <span>v{rel.versao_atual} • {versao.perguntas.length} perguntas</span>
+                                                    <div className="flex gap-2">
+                                                        <button onClick={() => { setRelatorioSelecionado(id); setVersaoSelecionada(rel.versao_atual); }} className="p-2 bg-blue-100 text-blue-700 rounded hover:bg-blue-200"><Icon name="edit" size={16}/></button>
+                                                        <button onClick={() => removerRelatorio(id)} className="p-2 bg-red-100 text-red-700 rounded hover:bg-red-200"><Icon name="trash-2" size={16}/></button>
+                                                    </div>
                                                 </div>
                                             </div>
                                         );
@@ -287,13 +313,17 @@
                                             );
                                         })}
                                     </div>
-                                    <button onClick={() => setRelatorioSelecionado(null)} className="w-full mt-4 p-2 text-sm bg-gray-200 hover:bg-gray-300 rounded">← Voltar</button>
+                                    <button onClick={() => setRelatorioSelecionado(null)} className="w-full mt-4 p-2 text-sm bg-gray-200 hover:bg-gray-300 rounded">← Voltar para a lista</button>
                                 </div>
                             </div>
                             <div className="col-span-9">
                                 <div className="bg-white rounded-lg shadow p-4 mb-4">
                                      <input type="text" value={versaoAtual?.titulo || ''} onChange={(e) => atualizarVersao({ titulo: e.target.value })} className="text-2xl font-bold w-full border-b-2 border-transparent hover:border-gray-300 focus:border-red-500 outline-none mb-2" />
-                                     <textarea value={versaoAtual?.descricao || ''} onChange={(e) => atualizarVersao({ descricao: e.target.value })} className="text-gray-600 w-full border border-transparent hover:border-gray-300 focus:border-red-500 outline-none rounded p-1" rows={2} />
+                                     <textarea value={versaoAtual?.descricao || ''} onChange={(e) => atualizarVersao({ descricao: e.target.value })} className="text-gray-600 w-full border border-transparent hover:border-gray-300 focus:border-red-500 outline-none rounded p-1 mb-2" rows={2} />
+                                     <div>
+                                        <label className="text-sm font-medium text-gray-700">Versão Atual do Relatório</label>
+                                        <input type="text" value={config.relatorios[relatorioSelecionado]?.versao_atual || ''} onChange={(e) => atualizarDadosRelatorio({ versao_atual: e.target.value })} className="w-full p-2 mt-1 border rounded" />
+                                     </div>
                                 </div>
                                 <div className="bg-white rounded-lg shadow p-4">
                                     <div className="flex justify-between items-center mb-4">
