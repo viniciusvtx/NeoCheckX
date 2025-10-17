@@ -5,9 +5,10 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="theme-color" content="#4F46E5">
     <title>Relatórios Técnicos</title>
-    <link rel="manifest" href="manifest.json">
+    <!-- O caminho para o manifest agora é absoluto a partir da raiz do domínio. -->
+    <link rel="manifest" href="/NeoCheckX/app/manifest.json">
     <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
-    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.js"></script>
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
 </head>
@@ -1333,8 +1334,10 @@ export default App;
     <script>
         // Registrar Service Worker
         if ('serviceWorker' in navigator) {
-            navigator.serviceWorker.register('service-worker.js')
-                .then(reg => console.log('Service Worker registrado'))
+            // O caminho para o service worker também precisa ser absoluto.
+            // Isso assume que o service-worker.js está na raiz do repositório.
+            navigator.serviceWorker.register('/NeoCheckX/service-worker.js')
+                .then(reg => console.log('Service Worker registrado com sucesso'))
                 .catch(err => console.error('Erro ao registrar SW:', err));
         }
     </script>
