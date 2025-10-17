@@ -37,7 +37,27 @@
             return <span className={`inline-flex justify-center items-center ${className}`} dangerouslySetInnerHTML={{ __html: iconSvg }} />;
         };
         
-        const CustomModal = ({ modal, setModal }) => { /* ... (same as before) ... */ };
+        const CustomModal = ({ modal, setModal }) => {
+             if (!modal) return null;
+             return (
+                <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-[100]">
+                    <div className="bg-white rounded-lg shadow-xl max-w-sm w-full p-6 text-center">
+                        <h3 className="text-lg font-bold text-gray-800 mb-4">{modal.title || 'Editor NeoCheckX'}</h3>
+                        <p className="text-gray-700 whitespace-pre-line mb-6">{modal.message}</p>
+                        <div className="flex gap-4">
+                            {modal.confirm ? (
+                                <>
+                                    <button onClick={() => { if(modal.onCancel) modal.onCancel(); setModal(null); }} className="flex-1 p-2 bg-gray-300 rounded hover:bg-gray-400">Cancelar</button>
+                                    <button onClick={() => { if(modal.onConfirm) modal.onConfirm(); setModal(null); }} className="flex-1 p-2 bg-red-600 text-white rounded hover:bg-red-700">Confirmar</button>
+                                </>
+                            ) : (
+                                <button onClick={() => setModal(null)} className="w-full p-2 bg-red-600 text-white rounded hover:bg-red-700">OK</button>
+                            )}
+                        </div>
+                    </div>
+                </div>
+            );
+        };
 
         const TIPOS_CAMPO = [
           { id: 'texto_curto', nome: 'Texto Curto' }, { id: 'texto_longo', nome: 'Texto Longo' },
@@ -65,34 +85,67 @@
             }
           };
 
-          const adicionarRelatorio = () => { /* ... (same as before) ... */ };
-          const removerRelatorio = (idParaRemover) => { /* ... (same as before) ... */ };
+          const adicionarRelatorio = () => {
+             const id = prompt('ID do relatório (ex: suporte_lentidao):');
+            if (!id || !id.trim()) return;
+            if (config.relatorios[id]) {
+                setModal({title: 'Erro', message: 'Já existe um relatório com este ID!'});
+                return;
+            }
+            const novoRelatorio = {
+                versao_atual: "1.0.0",
+                versoes: { "1.0.0": { id, titulo: "Novo Relatório", descricao: "Descrição do relatório", data_criacao: new Date().toISOString().split('T')[0], status: "ativa", perguntas: [] } }
+            };
+            setConfig(prev => ({...prev, relatorios: {...prev.relatorios, [id]: novoRelatorio}}));
+            setRelatorioSelecionado(id);
+            setVersaoSelecionada("1.0.0");
+            markAsEdited();
+          };
           
-          const handleVersionChange = (newVersionStr) => {
-            if (!relatorioSelecionado) return;
+          const removerRelatorio = (idParaRemover) => {
+            const relatorioParaRemover = config.relatorios[idParaRemover];
+            const tituloRelatorio = relatorioParaRemover?.versoes[relatorioParaRemover.versao_atual]?.titulo || idParaRemover;
+            setModal({
+                title: 'Confirmar Exclusão',
+                message: `Deseja realmente excluir o relatório "${tituloRelatorio}"?`,
+                confirm: true,
+                onConfirm: () => {
+                    setConfig(prev => {
+                        const novosRelatorios = {...prev.relatorios};
+                        delete novosRelatorios[idParaRemover];
+                        if (relatorioSelecionado === idParaRemover) {
+                            setRelatorioSelecionado(null);
+                            setVersaoSelecionada(null);
+                        }
+                        return {...prev, relatorios: novosRelatorios};
+                    });
+                }
+            });
+          };
 
-            setConfig(prev => {
+          const handleVersionChange = (newVersionStr) => {
+            handleVersionChange(newVersionStr, versaoSelecionada);
+          };
+          
+          const handleVersionChangeCommit = (newVersion, oldVersion) => {
+             if (!relatorioSelecionado || !newVersion || newVersion === oldVersion) return;
+
+             setConfig(prev => {
                 const newState = JSON.parse(JSON.stringify(prev));
                 const report = newState.relatorios[relatorioSelecionado];
                 
-                if (report && report.versoes[versaoSelecionada]) {
-                    const versionData = report.versoes[versaoSelecionada];
-                    // Only rename if the new key is different and not empty
-                    if (newVersionStr && newVersionStr !== versaoSelecionada) {
-                        delete report.versoes[versaoSelecionada];
-                        report.versoes[newVersionStr] = versionData;
-                    }
-                    report.versao_atual = newVersionStr;
+                if (report && report.versoes[oldVersion]) {
+                    const versionData = report.versoes[oldVersion];
+                    delete report.versoes[oldVersion];
+                    report.versoes[newVersion] = versionData;
+                    report.versao_atual = newVersion;
                 }
                 
                 return newState;
             });
-            // Update the selected version state only if the new string is valid
-            if (newVersionStr) {
-                setVersaoSelecionada(newVersionStr);
-            }
+            setVersaoSelecionada(newVersion);
             markAsEdited();
-          };
+          }
           
           const atualizarVersao = (updates) => {
             setConfig(prev => {
@@ -115,13 +168,20 @@
               atualizarVersao({ perguntas: atualizarRecursivo(perguntasAtuais) });
           };
           
-          const adicionarPergunta = () => { /* ... (same as before) ... */ };
+          const adicionarPergunta = () => {
+            const novaPergunta = { id: `p_${Date.now()}`, tipo: 'texto_curto', texto: 'Nova Pergunta', obrigatorio: true };
+            const perguntasAtuais = config.relatorios[relatorioSelecionado].versoes[versaoSelecionada].perguntas;
+            let perguntasAtualizadas = [...perguntasAtuais, novaPergunta];
+            atualizarVersao({ perguntas: perguntasAtualizadas });
+            setEditandoPergunta(novaPergunta.id);
+          };
+
           const removerPergunta = (perguntaId) => { /* ... (same as before) ... */ };
           const exportarJSON = () => { /* ... (same as before) ... */ };
           const importarJSON = (event) => { /* ... (same as before) ... */ };
           
-          const relatorioAtivo = config.relatorios[relatorioSelecionado];
-          const versaoAtual = relatorioAtivo ? relatorioAtivo.versoes[versaoSelecionada] : null;
+          const relatorioAtivo = relatorioSelecionado ? config.relatorios[relatorioSelecionado] : null;
+          const versaoAtual = relatorioAtivo && versaoSelecionada ? relatorioAtivo.versoes[versaoSelecionada] : null;
 
           const encontrarPergunta = (id) => {
             if (!versaoAtual) return null;
@@ -130,7 +190,38 @@
 
           const perguntaParaEditar = encontrarPergunta(editandoPergunta);
 
-          const renderEditorPergunta = (pergunta) => { /* ... (same as before, with button fixes) ... */ };
+          const renderEditorPergunta = (pergunta) => {
+             if (!pergunta) return null;
+             return (
+                <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+                    <div className="bg-white rounded-lg shadow-lg p-6 max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+                        <div className="flex justify-between items-center mb-6 pb-4 border-b">
+                            <h3 className="text-lg font-semibold">Editar Pergunta</h3>
+                        </div>
+                        <div className="space-y-4">
+                            <div>
+                                <label className="block text-sm font-medium mb-1">Texto da Pergunta</label>
+                                <input type="text" value={pergunta.texto} onChange={(e) => atualizarPergunta(pergunta.id, { texto: e.target.value })} className="w-full p-2 border rounded" />
+                            </div>
+                            <div className="flex items-center gap-2">
+                                <input type="checkbox" id="obrigatorio" checked={!!pergunta.obrigatorio} onChange={(e) => atualizarPergunta(pergunta.id, { obrigatorio: e.target.checked })} className="rounded" />
+                                <label htmlFor="obrigatorio" className="text-sm">Campo obrigatório</label>
+                            </div>
+                            <div>
+                                <label className="block text-sm font-medium mb-1">Tipo de Campo</label>
+                                <select value={pergunta.tipo} onChange={e => atualizarPergunta(pergunta.id, {tipo: e.target.value})} className="w-full p-2 border rounded">
+                                    {TIPOS_CAMPO.map(tipo => <option key={tipo.id} value={tipo.id}>{tipo.nome}</option>)}
+                                </select>
+                            </div>
+                        </div>
+                        <div className="flex justify-end gap-4 pt-6 mt-6 border-t">
+                            <button onClick={() => setEditandoPergunta(null)} className="px-6 py-2 bg-gray-200 text-gray-800 rounded hover:bg-gray-300">Cancelar</button>
+                            <button onClick={() => setEditandoPergunta(null)} className="px-6 py-2 bg-red-600 text-white rounded hover:bg-red-700 flex items-center gap-2"><Icon name="save" size={18}/> Salvar</button>
+                        </div>
+                    </div>
+                </div>
+             );
+          };
 
           const renderPergunta = (p) => (
             <div key={p.id} className="bg-white border rounded p-3 mb-3 hover:shadow-md transition-shadow">
@@ -152,10 +243,12 @@
             <div className="min-h-screen bg-gray-50">
                 <CustomModal modal={modal} setModal={setModal} />
                 {perguntaParaEditar && renderEditorPergunta(perguntaParaEditar)}
-                <div className="bg-red-700 text-white p-4 shadow-lg"> {/* ... Header ... */} </div>
+                <div className="bg-red-700 text-white p-4 shadow-lg">
+                    {/* ... Header ... */}
+                </div>
                 <div className="max-w-7xl mx-auto p-4">
                     {!relatorioSelecionado ? (
-                        <div className="bg-white rounded-lg shadow p-6"> {/* ... Tela Inicial ... */} </div>
+                       <div className="bg-white rounded-lg shadow p-6"> {/* ... Tela Inicial ... */} </div>
                     ) : (
                         <div className="grid grid-cols-12 gap-4">
                             <div className="col-span-3"> {/* ... Sidebar ... */} </div>
@@ -165,7 +258,11 @@
                                      <textarea value={versaoAtual?.descricao || ''} onChange={(e) => atualizarVersao({ descricao: e.target.value })} className="text-gray-600 w-full border border-transparent hover:border-gray-300 focus:border-red-500 outline-none rounded p-1 mb-2" rows={2} />
                                      <div>
                                         <label className="text-sm font-medium text-gray-700">Versão Atual do Relatório</label>
-                                        <input type="text" value={relatorioAtivo?.versao_atual || ''} onChange={(e) => handleVersionChange(e.target.value)} className="w-full p-2 mt-1 border rounded" />
+                                        <input type="text" 
+                                            key={versaoSelecionada} 
+                                            defaultValue={versaoSelecionada}
+                                            onBlur={(e) => handleVersionChangeCommit(e.target.value, versaoSelecionada)}
+                                            className="w-full p-2 mt-1 border rounded" />
                                      </div>
                                 </div>
                                 <div className="bg-white rounded-lg shadow p-4">
