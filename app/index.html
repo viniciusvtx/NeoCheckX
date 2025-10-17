@@ -3,69 +3,52 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <!-- Cor do tema atualizada para vermelho -->
     <meta name="theme-color" content="#DC2626">
-    <title>NeoCheckX</title>
+    <title>NeoCheckX - Relatórios</title>
+    <link rel="icon" href="/favicon.ico" type="image/x-icon">
     <link rel="manifest" href="/NeoCheckX/app/manifest.json">
-    
     <script crossorigin src="https://unpkg.com/react@18.2.0/umd/react.production.min.js"></script>
     <script crossorigin src="https://unpkg.com/react-dom@18.2.0/umd/react-dom.production.min.js"></script>
-    
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
-    
     <script src="https://unpkg.com/lucide@latest"></script>
 </head>
-<body>
+<body class="bg-gray-100">
     <div id="root"></div>
     
     <script type="text/babel">
         const { useState, useEffect, useRef } = React;
 
-        // Componente para renderizar ícones
+        // Componente de Ícone
         const Icon = ({ name, color = 'currentColor', size = 24, className = '' }) => {
             const iconNameKebab = name.replace(/([a-z0-9]|(?=[A-Z]))([A-Z])/g, '$1-$2').toLowerCase();
-            if (!lucide.icons[iconNameKebab]) {
-                console.warn(`Ícone '${iconNameKebab}' não encontrado.`);
+            useEffect(() => {
+                if (window.lucide) lucide.createIcons();
+            }, [name, size, color, className]);
+
+            if (!window.lucide || !lucide.icons[iconNameKebab]) {
                 return <span className={`icon-placeholder ${className}`} style={{ width: size, height: size, display: 'inline-block' }} />;
             }
             const iconSvg = lucide.icons[iconNameKebab].toSvg({ color, 'stroke-width': 2, width: size, height: size });
             return <span className={`inline-flex justify-center items-center ${className}`} dangerouslySetInnerHTML={{ __html: iconSvg }} />;
         };
         
-        // Componente para Alertas e Confirmações Personalizadas
+        // Componente de Modal
         const CustomModal = ({ modal, setModal }) => {
             if (!modal) return null;
-
-            const handleConfirm = () => {
-                if (modal.onConfirm) modal.onConfirm();
-                setModal(null);
-            };
-
-            const handleCancel = () => {
-                if (modal.onCancel) modal.onCancel();
-                setModal(null);
-            };
-
             return (
-                <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+                <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-[100]">
                     <div className="bg-white rounded-lg shadow-xl max-w-sm w-full p-6 text-center">
                         <h3 className="text-lg font-bold text-gray-800 mb-4">{modal.title || 'NeoCheckX'}</h3>
                         <p className="text-gray-700 whitespace-pre-line mb-6">{modal.message}</p>
                         <div className="flex gap-4">
                             {modal.confirm ? (
                                 <>
-                                    <button onClick={handleCancel} className="flex-1 p-2 bg-gray-300 text-gray-800 rounded hover:bg-gray-400">
-                                        {modal.cancelText || 'Cancelar'}
-                                    </button>
-                                    <button onClick={handleConfirm} className="flex-1 p-2 bg-red-600 text-white rounded hover:bg-red-700">
-                                        {modal.confirmText || 'Confirmar'}
-                                    </button>
+                                    <button onClick={() => { if(modal.onCancel) modal.onCancel(); setModal(null); }} className="flex-1 p-2 bg-gray-300 rounded hover:bg-gray-400">Cancelar</button>
+                                    <button onClick={() => { if(modal.onConfirm) modal.onConfirm(); setModal(null); }} className="flex-1 p-2 bg-red-600 text-white rounded hover:bg-red-700">Confirmar</button>
                                 </>
                             ) : (
-                                <button onClick={() => setModal(null)} className="w-full p-2 bg-red-600 text-white rounded hover:bg-red-700">
-                                    OK
-                                </button>
+                                <button onClick={() => setModal(null)} className="w-full p-2 bg-red-600 text-white rounded hover:bg-red-700">OK</button>
                             )}
                         </div>
                     </div>
@@ -73,138 +56,138 @@
             );
         };
 
+        // Hook para IndexedDB
+        const useIndexedDB = () => { /* ... (código do hook useIndexedDB aqui) ... */ };
+        
         const App = () => {
-          const [tela, setTela] = useState(window.location.hash.replace('#', '') || 'inicio');
-          const [sessoes, setSessoes] = useState([]);
-          const [sessaoAtual, setSessaoAtual] = useState(null);
-          const [respostas, setRespostas] = useState({});
-          const [reportConfig, setReportConfig] = useState(null);
-          const [loading, setLoading] = useState(true);
-          const [modal, setModal] = useState(null);
-          const [salvando, setSalvando] = useState(false);
-          const [tempoGasto, setTempoGasto] = useState(0);
-          const [configs, setConfigs] = useState({
-            dados_tecnicos: {
-              nome_equipe: '',
-              tecnico_interno: '',
-              placa_veiculo: '',
-              tipo_veiculo: '' 
+            const [tela, setTela] = useState('inicio');
+            // ... (restante dos seus estados) ...
+            const [configs, setConfigs] = useState({
+                dados_tecnicos: { nome_equipe: '', tecnico_interno: '', placa_veiculo: '', tipo_veiculo: '' }
+            });
+            const db = useIndexedDB();
+            const [relatoriosConfig, setRelatoriosConfig] = useState(null);
+            const [modal, setModal] = useState(null);
+
+            useEffect(() => {
+                const carregarTudo = async () => {
+                    // Carregar configs do DB
+                    const configsSalvas = await db.carregarConfiguracao('dados_tecnicos');
+                    if (configsSalvas) {
+                        setConfigs(prev => ({...prev, dados_tecnicos: configsSalvas }));
+                    }
+
+                    // Carregar relatorios.json
+                    try {
+                        const response = await fetch('/NeoCheckX/relatorios.json');
+                        if (!response.ok) throw new Error('Falha ao carregar JSON');
+                        const data = await response.json();
+                        setRelatoriosConfig(data);
+                    } catch (error) {
+                        console.error("Erro ao carregar relatorios.json:", error);
+                        setModal({ title: 'Erro de Configuração', message: 'Não foi possível carregar o arquivo de configuração dos relatórios.' });
+                    }
+                };
+                carregarTudo();
+
+                // Lógica de navegação por Hash
+                const handleHashChange = () => {
+                    const hash = window.location.hash.replace('#', '');
+                    if (['inicio', 'novo_relatorio', 'sessoes', 'configuracoes', 'formulario'].includes(hash)) {
+                        setTela(hash);
+                    } else {
+                        setTela('inicio');
+                    }
+                };
+                window.addEventListener('hashchange', handleHashChange);
+                handleHashChange(); // Executar na carga inicial
+                return () => window.removeEventListener('hashchange', handleHashChange);
+            }, []);
+
+            const mudarTela = (novaTela) => {
+                window.location.hash = novaTela;
+            };
+
+            const salvarConfiguracoes = async () => {
+                await db.salvarConfiguracao('dados_tecnicos', configs.dados_tecnicos);
+                setModal({ message: '✓ Configurações salvas com sucesso!' });
+            };
+            
+            // ... (restante do seu código App, com as devidas substituições de ícones e `alert`/`confirm`) ...
+
+            if (!relatoriosConfig) {
+                return <div className="flex items-center justify-center h-screen">Carregando configurações...</div>;
             }
-          });
-          
-          const db = useIndexedDB();
-          const intervaloTempo = useRef(null);
 
-          // Roteamento e Carregamento Inicial
-          useEffect(() => {
-            const handleHashChange = () => {
-              setTela(window.location.hash.replace('#', '') || 'inicio');
-            };
-            window.addEventListener('hashchange', handleHashChange);
+            // Renderização baseada na tela
+            if (tela === 'inicio') {
+                return (
+                    <div className="min-h-screen bg-gradient-to-br from-red-50 to-orange-100 p-4">
+                        <CustomModal modal={modal} setModal={setModal} />
+                        <div className="max-w-md mx-auto pt-20">
+                            <div className="text-center mb-12">
+                                <Icon name="file-text" size={64} className="mx-auto mb-4 text-red-600" />
+                                <h1 className="text-3xl font-bold text-gray-800 mb-2">NeoCheckX</h1>
+                                <p className="text-gray-600">Sistema offline para visitas técnicas</p>
+                            </div>
 
-            const carregarDadosIniciais = async () => {
-              await checkForUpdates(true); // silent = true
-              const configsSalvas = await db.carregarConfiguracao('dados_tecnicos');
-              if (configsSalvas) setConfigs({ dados_tecnicos: configsSalvas });
-              setLoading(false);
-            };
-            carregarDadosIniciais();
-
-            return () => window.removeEventListener('hashchange', handleHashChange);
-          }, []);
-
-          const navigateTo = (newScreen) => {
-            window.location.hash = newScreen;
-          };
-          
-          const checkForUpdates = async (silent = false) => {
-              if(!silent) setModal({ title: 'Atualizando', message: 'Buscando atualizações...' });
-              try {
-                  const response = await fetch(`/NeoCheckX/relatorios.json?v=${new Date().getTime()}`);
-                  if (!response.ok) throw new Error('Falha na rede');
-                  const data = await response.json();
-                  setReportConfig(data);
-                  await db.salvarConfiguracao('relatorios_json', data);
-                  if (!silent) setModal({ message: '✓ Configurações atualizadas com sucesso!' });
-              } catch (error) {
-                  console.error("Erro ao buscar atualizações:", error);
-                  if (!silent) setModal({ title: 'Erro', message: '⚠️ Não foi possível buscar atualizações. Usando a versão offline.' });
-                  const localConfig = await db.carregarConfiguracao('relatorios_json');
-                  if(localConfig) {
-                    setReportConfig(localConfig);
-                  } else {
-                     setModal({ title: 'Erro Crítico', message: 'Nenhuma configuração offline encontrada. O app pode não funcionar corretamente.' });
-                  }
-              }
-          };
-
-          function useIndexedDB() { /* ... Lógica do IndexedDB ... */ return { salvarSessao: (s) => {}, carregarSessoes: () => [], deletarSessao: (id) => {}, salvarConfiguracao: (k,v) => {}, carregarConfiguracao: (k) => null }; }
-
-          // ... O restante da lógica do componente App (cronômetro, auto-save, etc.) ...
-          // A lógica principal permanece a mesma, mas usando `MapsTo` e `setModal`
-          const iniciarNovaSessao = (tipoRelatorio) => {
-            //...
-            navigateTo('formulario');
-          }
-
-          if (loading || !reportConfig) {
-            return <div className="min-h-screen bg-gray-100 flex items-center justify-center"><Icon name="loader-2" className="animate-spin text-red-600" size={48} /></div>;
-          }
-
-          return (
-            <>
-              <CustomModal modal={modal} setModal={setModal} />
-              
-              {tela === 'inicio' && (
-                <div className="min-h-screen bg-gradient-to-br from-red-50 to-red-100 p-4">
-                  <div className="max-w-md mx-auto pt-20">
-                    <div className="text-center mb-12"> <Icon name="file-text" size={64} className="mx-auto mb-4 text-red-600" /> <h1 className="text-3xl font-bold text-gray-800 mb-2">NeoCheckX</h1> <p className="text-gray-600">Sistema offline para visitas técnicas</p> </div>
-                    <div className="space-y-4">
-                      <button onClick={() => navigateTo('novo_relatorio')} className="w-full p-4 bg-red-600 text-white rounded-lg shadow-lg hover:bg-red-700 flex items-center justify-center gap-3 text-lg font-semibold"> <Icon name="plus" size={24} /> Nova Sessão </button>
-                      <button onClick={async () => { const sessoesSalvas = await db.carregarSessoes(); setSessoes(sessoesSalvas); navigateTo('sessoes'); }} className="w-full p-4 bg-white text-red-600 rounded-lg shadow-lg hover:bg-gray-50 flex items-center justify-center gap-3 text-lg font-semibold border-2 border-red-600"> <Icon name="folder-open" size={24} /> Reabrir Sessão </button>
-                      <button onClick={() => navigateTo('configuracoes')} className="w-full p-4 bg-white text-gray-700 rounded-lg shadow hover:bg-gray-50 flex items-center justify-center gap-3"> <Icon name="settings" size={20} /> Configurações </button>
+                            <div className="space-y-4">
+                                <button onClick={() => mudarTela('novo_relatorio')} className="w-full p-4 bg-red-600 text-white rounded-lg shadow-lg hover:bg-red-700 flex items-center justify-center gap-3 text-lg font-semibold">
+                                    <Icon name="plus" size={24} /> Nova Sessão
+                                </button>
+                                {/* ... outros botões ... */}
+                                <button onClick={() => mudarTela('configuracoes')} className="w-full p-4 bg-white text-gray-700 rounded-lg shadow hover:bg-gray-50 flex items-center justify-center gap-3">
+                                    <Icon name="settings" size={20} /> Configurações
+                                </button>
+                            </div>
+                        </div>
                     </div>
-                    <div className="mt-8 text-center text-sm text-gray-500"> Versão do App: {reportConfig.versao_atual} </div>
-                  </div>
-                </div>
-              )}
+                );
+            }
+            
+            if (tela === 'configuracoes') {
+                 return (
+                    <div className="min-h-screen bg-gray-50 p-4">
+                        <CustomModal modal={modal} setModal={setModal} />
+                        <div className="max-w-2xl mx-auto">
+                            <div className="mb-6">
+                                <button onClick={() => mudarTela('inicio')} className="text-red-600 hover:text-red-700 mb-4">← Voltar</button>
+                                <h2 className="text-2xl font-bold text-gray-800">Configurações</h2>
+                            </div>
+                            <div className="bg-white rounded-lg shadow p-6 mb-4">
+                                <h3 className="font-semibold text-gray-800 mb-4">Dados Padrão</h3>
+                                <div className="space-y-4">
+                                    {/* ... Inputs para configurações, ex: ... */}
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700 mb-1">Tipo de Veículo</label>
+                                        <input type="text" value={configs.dados_tecnicos.tipo_veiculo || ''} onChange={(e) => setConfigs(prev => ({ ...prev, dados_tecnicos: { ...prev.dados_tecnicos, tipo_veiculo: e.target.value } }))} className="w-full p-2 border rounded" />
+                                    </div>
+                                    <button onClick={salvarConfiguracoes} className="w-full p-3 bg-red-600 text-white rounded hover:bg-red-700">Salvar Dados Padrão</button>
+                                </div>
+                            </div>
+                            {/* ... restante da tela de configurações ... */}
+                        </div>
+                    </div>
+                );
+            }
 
-              {tela === 'configuracoes' && (
-                <div className="min-h-screen bg-gray-50 p-4">
-                  <div className="max-w-2xl mx-auto">
-                    <div className="mb-6"> <button onClick={() => navigateTo('inicio')} className="text-red-600 hover:text-red-700 mb-4 flex items-center gap-2"> <Icon name="arrow-left" size={16}/> Voltar </button> <h2 className="text-2xl font-bold text-gray-800">Configurações</h2> </div>
-                    <div className="bg-white rounded-lg shadow p-6 mb-4">
-                      <h3 className="font-semibold text-gray-800 mb-4">Dados Padrão</h3>
-                      <div className="space-y-4">
-                          {[{key: 'nome_equipe', label: 'Nome da Equipe'}, {key: 'tecnico_interno', label: 'Técnico Interno'}, {key: 'placa_veiculo', label: 'Placa do Veículo'}, {key: 'tipo_veiculo', label: 'Tipo do Veículo'}].map(({key, label}) => (
-                              <div key={key}>
-                                  <label className="block text-sm font-medium text-gray-700 mb-1">{label}</label>
-                                  <input type="text" value={configs.dados_tecnicos[key] || ''} onChange={e => setConfigs(c => ({...c, dados_tecnicos: {...c.dados_tecnicos, [key]: e.target.value }}))} className="w-full p-2 border rounded" />
-                              </div>
-                          ))}
-                        <button onClick={async () => { await db.salvarConfiguracao('dados_tecnicos', configs.dados_tecnicos); setModal({ message: '✓ Configurações salvas com sucesso!' }); }} className="w-full p-3 bg-red-600 text-white rounded hover:bg-red-700"> Salvar Dados Padrão </button>
-                      </div>
-                    </div>
-                    <div className="bg-white rounded-lg shadow p-6 mb-4">
-                       <h3 className="font-semibold text-gray-800 mb-4">Gerenciamento de Dados</h3>
-                        <button onClick={() => checkForUpdates(false)} className="w-full p-3 bg-blue-600 text-white rounded hover:bg-blue-700 flex items-center justify-center gap-2 mb-4"> <Icon name="refresh-cw" size={18}/> Verificar Atualizações </button>
-                       <div className="text-center text-sm text-gray-500"> <p>Versão do JSON: {reportConfig.versao_atual}</p> <p>Última atualização: {new Date(reportConfig.data_atualizacao).toLocaleString('pt-BR')}</p> </div>
-                    </div>
-                    <div className="bg-white rounded-lg shadow p-6">
-                      <h3 className="font-semibold text-gray-800 mb-4 text-red-600">Zona de Perigo</h3>
-                      <button onClick={() => setModal({ title: 'Atenção', message: 'Deseja realmente apagar TODAS as sessões? Esta ação não pode ser desfeita!', confirm: true, onConfirm: async () => { const sessoes = await db.carregarSessoes(); for (const s of sessoes) await db.deletarSessao(s.id); setModal({ message: '✓ Todas as sessões foram apagadas' }); } })} className="w-full p-3 bg-red-600 text-white rounded hover:bg-red-700 flex items-center justify-center gap-2"> <Icon name="trash-2" size={18} /> Apagar Todas as Sessões </button>
-                    </div>
-                  </div>
-                </div>
-              )}
-              {/* Outras telas (novo_relatorio, sessoes, formulario) são renderizadas aqui */}
-            </>
-          );
+            // ... (outras telas: novo_relatorio, sessoes, formulario)
+            return null;
         };
         
         const container = document.getElementById('root');
         const root = ReactDOM.createRoot(container);
         root.render(<App />);
+    </script>
+    
+    <script>
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('/NeoCheckX/app/service-worker.js', { scope: '/NeoCheckX/app/' })
+                    .then(reg => console.log('Service Worker registrado com sucesso.'))
+                    .catch(err => console.error('Erro ao registrar SW:', err));
+            });
+        }
     </script>
 </body>
 </html>

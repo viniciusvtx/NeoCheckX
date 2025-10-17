@@ -30,7 +30,6 @@
             }, [name, size, color, className]);
             
             if (!window.lucide || !lucide.icons[iconNameKebab]) {
-                // Fallback to emoji if icon is not found
                 return <span className={className} style={{fontSize: `${size*0.8}px`, lineHeight: 1}}>{emojiMap[name] || '❓'}</span>;
             }
 
@@ -116,18 +115,33 @@
                     setConfig(prev => {
                         const novosRelatorios = {...prev.relatorios};
                         delete novosRelatorios[idParaRemover];
+                        if (relatorioSelecionado === idParaRemover) {
+                            setRelatorioSelecionado(null);
+                            setVersaoSelecionada(null);
+                        }
                         return {...prev, relatorios: novosRelatorios};
                     });
                 }
             });
           };
 
-          const atualizarDadosRelatorio = (updates) => {
+          const handleVersionChange = (newVersionStr) => {
+            if (!newVersionStr || newVersionStr === versaoSelecionada) return;
+
             setConfig(prev => {
                 const newState = JSON.parse(JSON.stringify(prev));
-                newState.relatorios[relatorioSelecionado] = { ...newState.relatorios[relatorioSelecionado], ...updates };
+                const report = newState.relatorios[relatorioSelecionado];
+                
+                if (report && report.versoes[versaoSelecionada]) {
+                    const versionData = report.versoes[versaoSelecionada];
+                    delete report.versoes[versaoSelecionada];
+                    report.versoes[newVersionStr] = versionData;
+                    report.versao_atual = newVersionStr;
+                }
+                
                 return newState;
             });
+            setVersaoSelecionada(newVersionStr);
             markAsEdited();
           };
           
@@ -207,8 +221,9 @@
             reader.readAsText(file);
             event.target.value = '';
           };
-
-          const versaoAtual = relatorioSelecionado && versaoSelecionada ? config.relatorios[relatorioSelecionado]?.versoes[versaoSelecionada] : null;
+          
+          const relatorioAtivo = config.relatorios[relatorioSelecionado];
+          const versaoAtual = relatorioAtivo ? relatorioAtivo.versoes[versaoSelecionada] : null;
 
           const encontrarPergunta = (id) => {
             if (!versaoAtual) return null;
@@ -255,8 +270,8 @@
                                         return (
                                             <div key={id} className={`rounded-lg bg-gray-50 border flex flex-col justify-between ${editedState[id] ? 'border-blue-400' : ''}`}>
                                                 <div className="p-4">
-                                                    <div className="font-semibold text-gray-800">{versao ? versao.titulo : 'Carregando...'}</div>
-                                                    <p className="text-sm text-gray-600 mt-1 h-10">{versao ? versao.descricao : ''}</p>
+                                                    <div className="font-semibold text-gray-800">{versao ? versao.titulo : 'ID: ' + id}</div>
+                                                    <p className="text-sm text-gray-600 mt-1 h-10">{versao ? versao.descricao : 'Sem dados de versão'}</p>
                                                 </div>
                                                 <div className="text-xs text-gray-500 p-4 mt-2 border-t flex justify-between items-center">
                                                     <span>v{rel.versao_atual} • {versao ? versao.perguntas.length : 0} perguntas</span>
@@ -281,15 +296,15 @@
                                     </div>
                                     <div className="space-y-2">
                                         {Object.entries(config.relatorios).map(([id, rel]) => {
-                                            const versao = rel.versoes[rel.versao_atual];
+                                            const versaoInfo = rel.versoes[rel.versao_atual];
                                             return (
                                                 <div key={id} onClick={() => { setRelatorioSelecionado(id); setVersaoSelecionada(rel.versao_atual); }}
                                                     className={`p-3 rounded cursor-pointer border-2 transition-all ${relatorioSelecionado === id ? 'bg-red-50 border-red-500' : 'bg-gray-50 border-transparent hover:border-gray-300'}`}>
                                                     <div className="font-medium text-sm flex items-center">
-                                                      <span>{versao ? versao.titulo : 'Carregando...'}</span>
+                                                      <span>{versaoInfo ? versaoInfo.titulo : 'ID: ' + id}</span>
                                                       {editedState[id] && <span className="ml-2 w-2 h-2 bg-blue-500 rounded-full" title="Modificado"></span>}
                                                     </div>
-                                                    <div className="text-xs text-gray-500 mt-1">v{rel.versao_atual} • {versao ? versao.perguntas.length : 0} perguntas</div>
+                                                    <div className="text-xs text-gray-500 mt-1">v{rel.versao_atual} • {versaoInfo ? versaoInfo.perguntas.length : 0} perguntas</div>
                                                 </div>
                                             );
                                         })}
@@ -303,7 +318,7 @@
                                      <textarea value={versaoAtual?.descricao || ''} onChange={(e) => atualizarVersao({ descricao: e.target.value })} className="text-gray-600 w-full border border-transparent hover:border-gray-300 focus:border-red-500 outline-none rounded p-1 mb-2" rows={2} />
                                      <div>
                                         <label className="text-sm font-medium text-gray-700">Versão Atual do Relatório</label>
-                                        <input type="text" value={config.relatorios[relatorioSelecionado]?.versao_atual || ''} onChange={(e) => atualizarDadosRelatorio({ versao_atual: e.target.value })} className="w-full p-2 mt-1 border rounded" />
+                                        <input type="text" value={relatorioAtivo?.versao_atual || ''} onBlur={(e) => handleVersionChange(e.target.value)} defaultValue={relatorioAtivo?.versao_atual} className="w-full p-2 mt-1 border rounded" />
                                      </div>
                                 </div>
                                 <div className="bg-white rounded-lg shadow p-4">
@@ -311,7 +326,7 @@
                                         <h3 className="font-semibold text-xl">Perguntas</h3>
                                         <button onClick={adicionarPergunta} className="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700 flex items-center gap-2"><Icon name="plus" size={18}/> Adicionar Pergunta</button>
                                     </div>
-                                    {versaoAtual?.perguntas.length > 0 ? versaoAtual.perguntas.map(renderPergunta) : <p className="text-center text-gray-500 py-8">Nenhuma pergunta criada.</p>}
+                                    {versaoAtual?.perguntas && versaoAtual.perguntas.length > 0 ? versaoAtual.perguntas.map(renderPergunta) : <p className="text-center text-gray-500 py-8">Nenhuma pergunta criada.</p>}
                                 </div>
                             </div>
                         </div>

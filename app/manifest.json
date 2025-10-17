@@ -1,5 +1,5 @@
 {
-  "name": "NeoCheckX",
+  "name": "NeoCheckX Relatórios",
   "short_name": "NeoCheckX",
   "description": "Sistema offline para relatórios de visitas técnicas",
   "start_url": "/NeoCheckX/app/",
@@ -9,13 +9,13 @@
   "orientation": "portrait",
   "icons": [
     {
-      "src": "icon-192.png",
+      "src": "/NeoCheckX/app/icon-192.png",
       "sizes": "192x192",
       "type": "image/png",
       "purpose": "any maskable"
     },
     {
-      "src": "icon-512.png",
+      "src": "/NeoCheckX/app/icon-512.png",
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "any maskable"
