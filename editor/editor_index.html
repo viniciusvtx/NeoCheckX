@@ -31,7 +31,7 @@
         const CustomModal = ({ modal, setModal }) => {
             if (!modal) return null;
             return (
-                <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+                <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-[100]">
                     <div className="bg-white rounded-lg shadow-xl max-w-sm w-full p-6 text-center">
                         <h3 className="text-lg font-bold text-gray-800 mb-4">{modal.title || 'Editor NeoCheckX'}</h3>
                         <p className="text-gray-700 whitespace-pre-line mb-6">{modal.message}</p>
@@ -90,9 +90,11 @@
           
           const atualizarVersao = (updates) => {
             setConfig(prev => {
-                const newState = JSON.parse(JSON.stringify(prev)); // Deep copy for safety
+                const newState = JSON.parse(JSON.stringify(prev));
                 const relatorio = newState.relatorios[relatorioSelecionado];
-                relatorio.versoes[versaoSelecionada] = { ...relatorio.versoes[versaoSelecionada], ...updates };
+                if (relatorio && relatorio.versoes[versaoSelecionada]) {
+                    relatorio.versoes[versaoSelecionada] = { ...relatorio.versoes[versaoSelecionada], ...updates };
+                }
                 return newState;
             });
           };
@@ -101,37 +103,75 @@
               const perguntasAtuais = config.relatorios[relatorioSelecionado].versoes[versaoSelecionada].perguntas;
               const atualizarRecursivo = (perguntas) => perguntas.map(p => {
                   if (p.id === perguntaId) return { ...p, ...updates };
-                  if (p.perguntas_condicionais) {
-                      const condicionaisAtualizadas = {};
-                      for (let resposta in p.perguntas_condicionais) {
-                          condicionaisAtualizadas[resposta] = atualizarRecursivo(p.perguntas_condicionais[resposta]);
-                      }
-                      return { ...p, perguntas_condicionais: condicionaisAtualizadas };
-                  }
+                  // Incluir lógica para perguntas condicionais se necessário no futuro
                   return p;
               });
               atualizarVersao({ perguntas: atualizarRecursivo(perguntasAtuais) });
           };
           
-          const adicionarPergunta = (parentId = null, respostaCondicional = null) => {
+          const adicionarPergunta = () => {
             const novaPergunta = { id: `p_${Date.now()}`, tipo: 'texto_curto', texto: 'Nova Pergunta', obrigatorio: false };
             const perguntasAtuais = config.relatorios[relatorioSelecionado].versoes[versaoSelecionada].perguntas;
-            let perguntasAtualizadas = JSON.parse(JSON.stringify(perguntasAtuais));
-
-            if (parentId) { /* Lógica para adicionar pergunta condicional */ } 
-            else { perguntasAtualizadas.push(novaPergunta); }
-            
+            let perguntasAtualizadas = [...perguntasAtuais, novaPergunta];
             atualizarVersao({ perguntas: perguntasAtualizadas });
             setEditandoPergunta(novaPergunta.id);
           };
 
-          const removerPergunta = (perguntaId) => { /* ... */ };
-          const moverPergunta = (perguntaId, direcao) => { /* ... */ };
-          const adicionarVersao = () => { /* ... */ };
-          const exportarJSON = () => { /* ... */ };
-          const importarJSON = (event) => { /* ... */ };
+          const removerPergunta = (perguntaId) => {
+            setModal({
+                title: 'Confirmar Remoção',
+                message: 'Deseja realmente remover esta pergunta?',
+                confirm: true,
+                onConfirm: () => {
+                    const perguntasAtuais = versaoAtual.perguntas;
+                    const perguntasAtualizadas = perguntasAtuais.filter(p => p.id !== perguntaId);
+                    atualizarVersao({ perguntas: perguntasAtualizadas });
+                }
+            });
+          };
+
+          const exportarJSON = () => {
+            const configParaExportar = {...config, data_atualizacao: new Date().toISOString()};
+            const dataStr = JSON.stringify(configParaExportar, null, 2);
+            const dataBlob = new Blob([dataStr], { type: 'application/json' });
+            const url = URL.createObjectURL(dataBlob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = 'relatorios.json';
+            link.click();
+            URL.revokeObjectURL(url);
+            setModal({ message: '✓ Arquivo JSON exportado com sucesso!' });
+          };
+
+          const importarJSON = (event) => {
+            const file = event.target.files[0];
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                try {
+                    const json = JSON.parse(e.target.result);
+                    if (!json.relatorios || !json.versao_atual) throw new Error("Estrutura inválida");
+                    setConfig(json);
+                    setModal({ message: '✓ JSON importado com sucesso!' });
+                    setRelatorioSelecionado(null);
+                    setVersaoSelecionada(null);
+                } catch (error) {
+                    setModal({ title: 'Erro de Importação', message: 'Arquivo JSON inválido ou corrompido.' });
+                }
+            };
+            reader.readAsText(file);
+            event.target.value = '';
+          };
 
           const versaoAtual = relatorioSelecionado && versaoSelecionada ? config.relatorios[relatorioSelecionado]?.versoes[versaoSelecionada] : null;
+
+          const encontrarPergunta = (id) => {
+            if (!versaoAtual) return null;
+            // Simplificado por enquanto, expandir para recursivo se houver perguntas aninhadas
+            return versaoAtual.perguntas.find(p => p.id === id);
+          }
+
+          const perguntaParaEditar = encontrarPergunta(editandoPergunta);
 
           const renderEditorPergunta = (pergunta) => {
              if (!pergunta) return null;
@@ -151,7 +191,12 @@
                                 <input type="checkbox" id="obrigatorio" checked={!!pergunta.obrigatorio} onChange={(e) => atualizarPergunta(pergunta.id, { obrigatorio: e.target.checked })} className="rounded" />
                                 <label htmlFor="obrigatorio" className="text-sm">Campo obrigatório</label>
                             </div>
-                            {/* Mais campos de edição aqui... */}
+                            <div>
+                                <label className="block text-sm font-medium mb-1">Tipo de Campo</label>
+                                <select value={pergunta.tipo} onChange={e => atualizarPergunta(pergunta.id, {tipo: e.target.value})} className="w-full p-2 border rounded">
+                                    {TIPOS_CAMPO.map(tipo => <option key={tipo.id} value={tipo.id}>{tipo.nome}</option>)}
+                                </select>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -161,7 +206,7 @@
           const renderPergunta = (p) => (
             <div key={p.id} className="bg-white border rounded p-3 mb-3 hover:shadow-md transition-shadow">
                 <div className="flex items-center justify-between">
-                    <div className="flex-1">
+                    <div className="flex-1 cursor-pointer" onClick={() => setEditandoPergunta(p.id)}>
                         <span className="font-medium">{p.texto}</span>
                         {p.obrigatorio && <span className="text-red-500 text-sm ml-2">*Obrigatório</span>}
                         <div className="text-xs text-gray-500 mt-1">{TIPOS_CAMPO.find(t => t.id === p.tipo)?.nome || p.tipo}</div>
@@ -174,25 +219,62 @@
             </div>
           );
           
-          const perguntaParaEditar = editandoPergunta && versaoAtual ? versaoAtual.perguntas.find(p => p.id === editandoPergunta) : null;
-
           return (
             <div className="min-h-screen bg-gray-50">
                 <CustomModal modal={modal} setModal={setModal} />
                 {perguntaParaEditar && renderEditorPergunta(perguntaParaEditar)}
-                <div className="bg-red-700 text-white p-4 shadow-lg">{/* Header */}</div>
+                <div className="bg-red-700 text-white p-4 shadow-lg">
+                    <div className="max-w-7xl mx-auto flex justify-between items-center">
+                        <div>
+                            <h1 className="text-2xl font-bold">Editor NeoCheckX</h1>
+                            <p className="text-sm text-red-200">Crie e edite estruturas de relatórios</p>
+                        </div>
+                        <div className="flex gap-2">
+                            <button onClick={() => fileInputRef.current?.click()} className="px-4 py-2 bg-white text-red-700 rounded hover:bg-red-50 flex items-center gap-2"><Icon name="upload" size={18} /> Importar</button>
+                            <button onClick={exportarJSON} className="px-4 py-2 bg-red-800 text-white rounded hover:bg-red-900 flex items-center gap-2"><Icon name="download" size={18} /> Exportar</button>
+                            <input ref={fileInputRef} type="file" accept=".json" onChange={importarJSON} className="hidden" />
+                        </div>
+                    </div>
+                </div>
                 <div className="max-w-7xl mx-auto p-4">
                     {!relatorioSelecionado ? (
-                        <div className="text-center p-12 bg-white rounded-lg shadow">{/* Tela de Boas Vindas */}</div>
+                        <div className="text-center p-12 bg-white rounded-lg shadow">
+                            <Icon name="file-plus-2" size={64} className="mx-auto text-gray-300 mb-4" />
+                            <h3 className="text-xl font-semibold">Nenhum relatório selecionado</h3>
+                            <p className="text-gray-500 mb-6">Crie um novo relatório ou importe um arquivo JSON para começar.</p>
+                            <button onClick={adicionarRelatorio} className="px-6 py-3 bg-red-600 text-white rounded-lg hover:bg-red-700 inline-flex items-center gap-2"><Icon name="plus" size={20}/> Criar Relatório</button>
+                        </div>
                     ) : (
                         <div className="grid grid-cols-12 gap-4">
-                            <div className="col-span-3">{/* Sidebar com lista de relatórios */}</div>
+                            <div className="col-span-3">
+                                <div className="bg-white rounded-lg shadow p-4">
+                                    <div className="flex justify-between items-center mb-4">
+                                        <h2 className="font-semibold">Relatórios</h2>
+                                        <button onClick={adicionarRelatorio} className="p-1 text-red-600 hover:text-red-700" title="Adicionar relatório"><Icon name="plus-circle" size={20} /></button>
+                                    </div>
+                                    <div className="space-y-2">
+                                        {Object.entries(config.relatorios).map(([id, rel]) => {
+                                            const versao = rel.versoes[rel.versao_atual];
+                                            return (
+                                                <div key={id} onClick={() => { setRelatorioSelecionado(id); setVersaoSelecionada(rel.versao_atual); }}
+                                                    className={`p-3 rounded cursor-pointer border-2 transition-all ${relatorioSelecionado === id ? 'bg-red-50 border-red-500' : 'bg-gray-50 border-transparent hover:border-gray-300'}`}>
+                                                    <div className="font-medium text-sm">{versao.titulo}</div>
+                                                    <div className="text-xs text-gray-500 mt-1">v{rel.versao_atual} • {versao.perguntas.length} perguntas</div>
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
+                                </div>
+                            </div>
                             <div className="col-span-9">
-                                <div className="bg-white rounded-lg shadow p-4 mb-4">{/* Header do Relatório */}</div>
+                                <div className="bg-white rounded-lg shadow p-4 mb-4">
+                                     <input type="text" value={versaoAtual?.titulo || ''} onChange={(e) => atualizarVersao({ titulo: e.target.value })} className="text-2xl font-bold w-full border-b-2 border-transparent hover:border-gray-300 focus:border-red-500 outline-none mb-2" />
+                                     <textarea value={versaoAtual?.descricao || ''} onChange={(e) => atualizarVersao({ descricao: e.target.value })} className="text-gray-600 w-full border border-transparent hover:border-gray-300 focus:border-red-500 outline-none rounded p-1" rows={2} />
+                                </div>
                                 <div className="bg-white rounded-lg shadow p-4">
                                     <div className="flex justify-between items-center mb-4">
                                         <h3 className="font-semibold text-xl">Perguntas</h3>
-                                        <button onClick={() => adicionarPergunta()} className="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700 flex items-center gap-2"><Icon name="plus" size={18}/> Adicionar Pergunta</button>
+                                        <button onClick={adicionarPergunta} className="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700 flex items-center gap-2"><Icon name="plus" size={18}/> Adicionar Pergunta</button>
                                     </div>
                                     {versaoAtual?.perguntas.length > 0 ? versaoAtual.perguntas.map(renderPergunta) : <p className="text-center text-gray-500 py-8">Nenhuma pergunta criada.</p>}
                                 </div>
