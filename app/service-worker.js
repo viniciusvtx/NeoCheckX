@@ -6,10 +6,14 @@ const urlsToCache = [
   `${BASE_PATH}/app/index.html`,
   `${BASE_PATH}/app/manifest.json`,
   `${BASE_PATH}/relatorios.json`,
-  'https://unpkg.com/react@18/umd/react.production.min.js',
-  'https://unpkg.com/react-dom@18/umd/react-dom.production.min.js',
+  
+  // Corrigido para as versões exatas do index.html
+  'https://unpkg.com/react@18.2.0/umd/react.production.min.js',
+  'https://unpkg.com/react-dom@18.2.0/umd/react-dom.production.min.js',
+  
   'https://unpkg.com/@babel/standalone/babel.min.js',
-  'https://cdn.tailwindcss.com'
+  
+  // Removido 'https://cdn.tailwindcss.com' para evitar erro de CORS
 ];
 
 // Instalação - cacheia recursos

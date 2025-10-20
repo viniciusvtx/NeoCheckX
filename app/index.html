@@ -11,7 +11,7 @@
     <script crossorigin src="https://unpkg.com/react-dom@18.2.0/umd/react-dom.production.min.js"></script>
     <script src="https://unpkg.com/@babel/standalone@7.23.5/babel.min.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
-	<script src="https://unpkg.com/lucide-react@0.378.0/dist/umd/lucide-react.js"></script>
+    <script src="https://unpkg.com/lucide-react@0.378.0/dist/umd/lucide-react.js"></script>
     <style>
         /* Esconder avisos de desenvolvimento */
         body { margin: 0; padding: 0; font-family: system-ui, -apple-system, sans-serif; }
@@ -22,6 +22,7 @@
     
     <script type="text/babel">
 
+// Substituído 'import' por desestruturação das globais
 const { useState, useEffect, useRef } = React;
 const { Clock, Save, FileText, Settings, Plus, FolderOpen, MapPin, Edit, HelpCircle, AlertCircle, CheckCircle, Circle, Eye, EyeOff, Trash2, RefreshCw, Copy } = lucideReact;
 
@@ -760,6 +761,7 @@ const App = () => {
   return null;
 };
 
+// Removido 'export default App;'
         
         const container = document.getElementById('root');
         const root = ReactDOM.createRoot(container);
