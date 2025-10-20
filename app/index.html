@@ -582,8 +582,8 @@
     <script>
         if ('serviceWorker' in navigator) {
             window.addEventListener('load', () => {
-                const baseUrl = window.location.pathname.includes('/NeoCheckX/') 
-                    ? '/NeoCheckX/' 
+                const baseUrl = window.location.pathname.includes('/NeoCheckX/app') 
+                    ? '/NeoCheckX/app' 
                     : './';
                 navigator.serviceWorker.register(`${baseUrl}service-worker.js`)
                     .then(reg => console.log('✓ Service Worker registrado:', reg.scope))
