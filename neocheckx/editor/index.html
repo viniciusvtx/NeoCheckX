@@ -1,0 +1,1079 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Editor de Relatórios - NeoCheckX</title>
+    <script crossorigin src="https://unpkg.com/react@18.2.0/umd/react.production.min.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18.2.0/umd/react-dom.production.min.js"></script>
+    <script src="https://unpkg.com/@babel/standalone@7.23.5/babel.min.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body { margin: 0; padding: 0; font-family: system-ui, -apple-system, sans-serif; }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+    
+    <script type="text/babel">
+
+import React, { useState, useRef } from 'react';
+import { Plus, Trash2, Edit, Eye, Download, Upload, ArrowUp, ArrowDown, Copy, FileText, Settings, ChevronDown, ChevronRight, HelpCircle, AlertCircle } from 'lucide-react';
+
+const APP_NAME = 'NeoCheckX';
+
+// Modal de alerta customizado
+const useCustomAlert = () => {
+  const [alert, setAlert] = useState(null);
+
+  const showAlert = (message) => {
+    setAlert(message);
+  };
+
+  const AlertModal = () => {
+    if (!alert) return null;
+    
+    return (
+      <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+        <div className="bg-white rounded-lg shadow-xl max-w-md w-full p-6">
+          <div className="flex items-center gap-3 mb-4">
+            <div className="w-10 h-10 bg-red-100 rounded-full flex items-center justify-center">
+              <AlertCircle className="text-red-600" size={24} />
+            </div>
+            <h3 className="text-lg font-semibold">{APP_NAME} - Editor diz:</h3>
+          </div>
+          <p className="text-gray-700 mb-6 whitespace-pre-line">{alert}</p>
+          <button
+            onClick={() => setAlert(null)}
+            className="w-full p-3 bg-red-600 text-white rounded hover:bg-red-700"
+          >
+            OK
+          </button>
+        </div>
+      </div>
+    );
+  };
+
+  return { showAlert, AlertModal };
+};
+
+const TIPOS_CAMPO = [
+  { id: 'texto_curto', nome: 'Texto Curto', descricao: 'Campo de texto de uma linha' },
+  { id: 'texto_longo', nome: 'Texto Longo', descricao: 'Área de texto com múltiplas linhas' },
+  { id: 'numero', nome: 'Número', descricao: 'Campo numérico com validação' },
+  { id: 'sim_nao', nome: 'Sim/Não', descricao: 'Escolha binária' },
+  { id: 'escolha_unica', nome: 'Escolha Única', descricao: 'Seleção de uma opção' },
+  { id: 'multipla_escolha', nome: 'Múltipla Escolha', descricao: 'Seleção de várias opções' },
+  { id: 'localizacao', nome: 'Localização', descricao: 'GPS com latitude e longitude' },
+  { id: 'api_dinamica', nome: 'API Dinâmica', descricao: 'Busca dados de API externa' },
+  { id: 'calculado', nome: 'Campo Calculado', descricao: 'Cálculo automático com fórmula' }
+];
+
+const EditorWYSIWYG = () => {
+  const [config, setConfig] = useState({
+    versao_atual: "1.3.0",
+    data_atualizacao: new Date().toISOString(),
+    configuracoes: {
+      modo_debug: false,
+      permitir_importacao_manual: false
+    },
+    campos_configuracao_usuario: {
+      dados_tecnicos: [
+        { id: "nome_equipe", label: "Nome da Equipe", tipo: "texto", obrigatorio: true },
+        { id: "tecnico_interno", label: "Técnico Interno", tipo: "texto", obrigatorio: true },
+        { id: "placa_veiculo", label: "Placa do Veículo", tipo: "texto" },
+        { id: "tipo_veiculo", label: "Tipo de Veículo", tipo: "escolha", opcoes: ["Carro", "Moto", "Van", "Caminhonete"] }
+      ]
+    },
+    relatorios: {}
+  });
+
+  const [relatorioSelecionado, setRelatorioSelecionado] = useState(null);
+  const [versaoSelecionada, setVersaoSelecionada] = useState(null);
+  const [editandoPergunta, setEditandoPergunta] = useState(null);
+  const [modoVisualizacao, setModoVisualizacao] = useState('editor');
+  const [expandidos, setExpandidos] = useState({});
+  const fileInputRef = useRef(null);
+  const { showAlert, AlertModal } = useCustomAlert();
+
+  const adicionarRelatorio = () => {
+    const id = prompt('ID do relatório (ex: suporte_lentidao):');
+    if (!id) return;
+    
+    if (config.relatorios[id]) {
+      showAlert('Já existe um relatório com este ID!');
+      return;
+    }
+
+    const novoRelatorio = {
+      versao_atual: "1.0.0",
+      versoes: {
+        "1.0.0": {
+          id,
+          titulo: "Novo Relatório",
+          descricao: "Descrição do relatório",
+          data_criacao: new Date().toISOString().split('T')[0],
+          status: "ativa",
+          perguntas: []
+        }
+      }
+    };
+
+    setConfig({
+      ...config,
+      relatorios: {
+        ...config.relatorios,
+        [id]: novoRelatorio
+      }
+    });
+
+    setRelatorioSelecionado(id);
+    setVersaoSelecionada("1.0.0");
+  };
+
+  const adicionarVersao = () => {
+    if (!relatorioSelecionado) return;
+
+    const versaoAtual = config.relatorios[relatorioSelecionado].versao_atual;
+    const partes = versaoAtual.split('.').map(Number);
+    partes[1]++;
+    const novaVersao = partes.join('.');
+
+    const changelog = prompt('Descreva as mudanças nesta versão:');
+    if (!changelog) return;
+
+    const versaoAntiga = config.relatorios[relatorioSelecionado].versoes[versaoAtual];
+    const novaVersaoObj = {
+      ...JSON.parse(JSON.stringify(versaoAntiga)),
+      data_criacao: new Date().toISOString().split('T')[0],
+      changelog
+    };
+
+    const versoesAtualizadas = { ...config.relatorios[relatorioSelecionado].versoes };
+    versoesAtualizadas[versaoAtual].status = "legado";
+    versoesAtualizadas[novaVersao] = novaVersaoObj;
+
+    setConfig({
+      ...config,
+      relatorios: {
+        ...config.relatorios,
+        [relatorioSelecionado]: {
+          ...config.relatorios[relatorioSelecionado],
+          versao_atual: novaVersao,
+          versoes: versoesAtualizadas
+        }
+      }
+    });
+
+    setVersaoSelecionada(novaVersao);
+    showAlert(`✓ Nova versão ${novaVersao} criada!`);
+  };
+
+  const adicionarPergunta = (parentId = null, respostaCondicional = null) => {
+    if (!relatorioSelecionado || !versaoSelecionada) return;
+
+    const novaPergunta = {
+      id: `pergunta_${Date.now()}`,
+      tipo: 'texto_curto',
+      texto: 'Nova Pergunta',
+      obrigatorio: false
+    };
+
+    const relatorio = config.relatorios[relatorioSelecionado];
+    const versao = relatorio.versoes[versaoSelecionada];
+    
+    if (parentId && respostaCondicional) {
+      const adicionarCondicional = (perguntas) => {
+        for (let p of perguntas) {
+          if (p.id === parentId) {
+            if (!p.perguntas_condicionais) p.perguntas_condicionais = {};
+            if (!p.perguntas_condicionais[respostaCondicional]) {
+              p.perguntas_condicionais[respostaCondicional] = [];
+            }
+            p.perguntas_condicionais[respostaCondicional].push(novaPergunta);
+            return true;
+          }
+          if (p.perguntas_condicionais) {
+            for (let resposta in p.perguntas_condicionais) {
+              if (adicionarCondicional(p.perguntas_condicionais[resposta])) return true;
+            }
+          }
+        }
+        return false;
+      };
+      
+      const perguntasAtualizadas = JSON.parse(JSON.stringify(versao.perguntas));
+      adicionarCondicional(perguntasAtualizadas);
+      atualizarVersao({ perguntas: perguntasAtualizadas });
+    } else {
+      atualizarVersao({ perguntas: [...versao.perguntas, novaPergunta] });
+    }
+
+    setEditandoPergunta(novaPergunta.id);
+  };
+
+  const atualizarVersao = (updates) => {
+    setConfig({
+      ...config,
+      relatorios: {
+        ...config.relatorios,
+        [relatorioSelecionado]: {
+          ...config.relatorios[relatorioSelecionado],
+          versoes: {
+            ...config.relatorios[relatorioSelecionado].versoes,
+            [versaoSelecionada]: {
+              ...config.relatorios[relatorioSelecionado].versoes[versaoSelecionada],
+              ...updates
+            }
+          }
+        }
+      }
+    });
+  };
+
+  const atualizarPergunta = (perguntaId, updates) => {
+    const versao = config.relatorios[relatorioSelecionado].versoes[versaoSelecionada];
+    
+    const atualizarRecursivo = (perguntas) => {
+      return perguntas.map(p => {
+        if (p.id === perguntaId) {
+          return { ...p, ...updates };
+        }
+        if (p.perguntas_condicionais) {
+          const condicionaisAtualizadas = {};
+          for (let resposta in p.perguntas_condicionais) {
+            condicionaisAtualizadas[resposta] = atualizarRecursivo(p.perguntas_condicionais[resposta]);
+          }
+          return { ...p, perguntas_condicionais: condicionaisAtualizadas };
+        }
+        return p;
+      });
+    };
+
+    const perguntasAtualizadas = atualizarRecursivo(versao.perguntas);
+    atualizarVersao({ perguntas: perguntasAtualizadas });
+  };
+
+  const removerPergunta = (perguntaId) => {
+    if (!confirm('Deseja remover esta pergunta?')) return;
+
+    const versao = config.relatorios[relatorioSelecionado].versoes[versaoSelecionada];
+    
+    const removerRecursivo = (perguntas) => {
+      const resultado = perguntas.filter(p => p.id !== perguntaId);
+      return resultado.map(p => {
+        if (p.perguntas_condicionais) {
+          const condicionaisAtualizadas = {};
+          for (let resposta in p.perguntas_condicionais) {
+            condicionaisAtualizadas[resposta] = removerRecursivo(p.perguntas_condicionais[resposta]);
+          }
+          return { ...p, perguntas_condicionais: condicionaisAtualizadas };
+        }
+        return p;
+      });
+    };
+
+    const perguntasAtualizadas = removerRecursivo(versao.perguntas);
+    atualizarVersao({ perguntas: perguntasAtualizadas });
+    setEditandoPergunta(null);
+  };
+
+  const moverPergunta = (perguntaId, direcao) => {
+    const versao = config.relatorios[relatorioSelecionado].versoes[versaoSelecionada];
+    const perguntas = [...versao.perguntas];
+    const index = perguntas.findIndex(p => p.id === perguntaId);
+    
+    if (index === -1) return;
+    if (direcao === 'up' && index === 0) return;
+    if (direcao === 'down' && index === perguntas.length - 1) return;
+
+    const novoIndex = direcao === 'up' ? index - 1 : index + 1;
+    [perguntas[index], perguntas[novoIndex]] = [perguntas[novoIndex], perguntas[index]];
+    
+    atualizarVersao({ perguntas });
+  };
+
+  const exportarJSON = () => {
+    const dataStr = JSON.stringify(config, null, 2);
+    const dataBlob = new Blob([dataStr], { type: 'application/json' });
+    const url = URL.createObjectURL(dataBlob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = 'relatorios.json';
+    link.click();
+    URL.revokeObjectURL(url);
+    showAlert('✓ Arquivo JSON exportado com sucesso!');
+  };
+
+  const importarJSON = (event) => {
+    const file = event.target.files[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      try {
+        const jsonImportado = JSON.parse(e.target.result);
+        
+        if (!jsonImportado.relatorios || !jsonImportado.versao_atual) {
+          showAlert('Arquivo JSON inválido!');
+          return;
+        }
+
+        setConfig(jsonImportado);
+        showAlert('✓ JSON importado com sucesso!');
+      } catch (error) {
+        showAlert('Erro ao importar JSON:\n' + error.message);
+      }
+    };
+    reader.readAsText(file);
+    event.target.value = '';
+  };
+
+  const renderizarEditorPergunta = (pergunta) => {
+    if (!pergunta) return null;
+
+    return (
+      <div className="bg-white rounded-lg shadow-lg p-6">
+        <div className="flex justify-between items-center mb-6">
+          <h3 className="text-lg font-semibold">Editar Pergunta</h3>
+          <button onClick={() => setEditandoPergunta(null)} className="text-gray-500 hover:text-gray-700">✕</button>
+        </div>
+
+        <div className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium mb-1">Tipo de Pergunta</label>
+            <select
+              value={pergunta.tipo}
+              onChange={(e) => atualizarPergunta(pergunta.id, { tipo: e.target.value })}
+              className="w-full p-2 border rounded"
+            >
+              {TIPOS_CAMPO.map(tipo => (
+                <option key={tipo.id} value={tipo.id}>{tipo.nome} - {tipo.descricao}</option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium mb-1">Texto da Pergunta</label>
+            <input
+              type="text"
+              value={pergunta.texto}
+              onChange={(e) => atualizarPergunta(pergunta.id, { texto: e.target.value })}
+              className="w-full p-2 border rounded"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium mb-1">ID (gerado automaticamente)</label>
+            <input type="text" value={pergunta.id} readOnly className="w-full p-2 border rounded bg-gray-50" />
+          </div>
+
+          <div className="flex items-center gap-2">
+            <input
+              type="checkbox"
+              id="obrigatorio"
+              checked={pergunta.obrigatorio || false}
+              onChange={(e) => atualizarPergunta(pergunta.id, { obrigatorio: e.target.checked })}
+              className="rounded"
+            />
+            <label htmlFor="obrigatorio" className="text-sm">Campo obrigatório</label>
+          </div>
+
+          {(pergunta.tipo === 'escolha_unica' || pergunta.tipo === 'multipla_escolha') && (
+            <div>
+              <label className="block text-sm font-medium mb-1">Opções</label>
+              {(pergunta.opcoes || []).map((opcao, index) => (
+                <div key={index} className="flex gap-2 mb-2">
+                  <input
+                    type="text"
+                    value={opcao}
+                    onChange={(e) => {
+                      const novasOpcoes = [...(pergunta.opcoes || [])];
+                      novasOpcoes[index] = e.target.value;
+                      atualizarPergunta(pergunta.id, { opcoes: novasOpcoes });
+                    }}
+                    className="flex-1 p-2 border rounded"
+                  />
+                  <button
+                    onClick={() => {
+                      const novasOpcoes = (pergunta.opcoes || []).filter((_, i) => i !== index);
+                      atualizarPergunta(pergunta.id, { opcoes: novasOpcoes });
+                    }}
+                    className="p-2 text-red-500 hover:text-red-700"
+                  >
+                    <Trash2 size={18} />
+                  </button>
+                </div>
+              ))}
+              <button
+                onClick={() => {
+                  const novasOpcoes = [...(pergunta.opcoes || []), 'Nova opção'];
+                  atualizarPergunta(pergunta.id, { opcoes: novasOpcoes });
+                }}
+                className="text-sm text-red-600 hover:text-red-700"
+              >
+                + Adicionar opção
+              </button>
+            </div>
+          )}
+
+          {pergunta.tipo === 'numero' && (
+            <div>
+              <label className="block text-sm font-medium mb-1">Validação</label>
+              <div className="grid grid-cols-2 gap-2">
+                <input
+                  type="number"
+                  placeholder="Valor mínimo"
+                  value={pergunta.validacao?.minimo || ''}
+                  onChange={(e) => atualizarPergunta(pergunta.id, {
+                    validacao: { ...pergunta.validacao, minimo: parseFloat(e.target.value) || undefined }
+                  })}
+                  className="p-2 border rounded"
+                />
+                <input
+                  type="number"
+                  placeholder="Valor máximo"
+                  value={pergunta.validacao?.maximo || ''}
+                  onChange={(e) => atualizarPergunta(pergunta.id, {
+                    validacao: { ...pergunta.validacao, maximo: parseFloat(e.target.value) || undefined }
+                  })}
+                  className="p-2 border rounded"
+                />
+              </div>
+            </div>
+          )}
+
+          {pergunta.tipo === 'calculado' && (
+            <div>
+              <label className="block text-sm font-medium mb-1">Campos de Entrada</label>
+              <div className="space-y-2">
+                <input
+                  type="text"
+                  placeholder="Nome do campo 1"
+                  value={pergunta.campos_entrada?.[0]?.texto || ''}
+                  onChange={(e) => {
+                    const campos = pergunta.campos_entrada || [{ id: 'campo1', texto: '', tipo: 'numero' }];
+                    campos[0] = { ...campos[0], texto: e.target.value, id: 'medida_inicial' };
+                    atualizarPergunta(pergunta.id, { campos_entrada: campos });
+                  }}
+                  className="w-full p-2 border rounded"
+                />
+                <input
+                  type="text"
+                  placeholder="Nome do campo 2"
+                  value={pergunta.campos_entrada?.[1]?.texto || ''}
+                  onChange={(e) => {
+                    const campos = pergunta.campos_entrada || [
+                      { id: 'medida_inicial', texto: '', tipo: 'numero' },
+                      { id: 'medida_final', texto: '', tipo: 'numero' }
+                    ];
+                    campos[1] = { ...campos[1], texto: e.target.value, id: 'medida_final' };
+                    atualizarPergunta(pergunta.id, { campos_entrada: campos });
+                  }}
+                  className="w-full p-2 border rounded"
+                />
+              </div>
+              <div className="mt-2">
+                <label className="block text-sm font-medium mb-1">Fórmula</label>
+                <input
+                  type="text"
+                  placeholder="Ex: abs(medida_final - medida_inicial)"
+                  value={pergunta.formula || ''}
+                  onChange={(e) => atualizarPergunta(pergunta.id, { formula: e.target.value })}
+                  className="w-full p-2 border rounded"
+                />
+              </div>
+              <div className="mt-2">
+                <label className="block text-sm font-medium mb-1">Unidade</label>
+                <input
+                  type="text"
+                  placeholder="Ex: metros"
+                  value={pergunta.unidade || ''}
+                  onChange={(e) => atualizarPergunta(pergunta.id, { unidade: e.target.value })}
+                  className="w-full p-2 border rounded"
+                />
+              </div>
+            </div>
+          )}
+
+          <div>
+            <label className="block text-sm font-medium mb-1">Texto de Ajuda (opcional)</label>
+            <input
+              type="text"
+              placeholder="Título da ajuda"
+              value={pergunta.ajuda?.titulo || ''}
+              onChange={(e) => atualizarPergunta(pergunta.id, {
+                ajuda: { ...pergunta.ajuda, titulo: e.target.value }
+              })}
+              className="w-full p-2 border rounded mb-2"
+            />
+            <textarea
+              placeholder="Conteúdo da ajuda (use \n para quebras)"
+              value={pergunta.ajuda?.conteudo || ''}
+              onChange={(e) => atualizarPergunta(pergunta.id, {
+                ajuda: { ...pergunta.ajuda, conteudo: e.target.value }
+              })}
+              className="w-full p-2 border rounded"
+              rows={4}
+            />
+          </div>
+
+          {(pergunta.tipo === 'texto_curto' || pergunta.tipo === 'texto_longo') && (
+            <div>
+              <label className="block text-sm font-medium mb-1">Placeholder (opcional)</label>
+              <input
+                type="text"
+                value={pergunta.placeholder || ''}
+                onChange={(e) => atualizarPergunta(pergunta.id, { placeholder: e.target.value })}
+                className="w-full p-2 border rounded"
+              />
+            </div>
+          )}
+
+          <div>
+            <label className="block text-sm font-medium mb-1">Valor Padrão Config (opcional)</label>
+            <input
+              type="text"
+              placeholder="Ex: dados_tecnicos.nome_equipe"
+              value={pergunta.valor_padrao_config || ''}
+              onChange={(e) => atualizarPergunta(pergunta.id, { valor_padrao_config: e.target.value })}
+              className="w-full p-2 border rounded text-sm"
+            />
+            <p className="text-xs text-gray-500 mt-1">Para usar valores salvos nas configurações</p>
+          </div>
+
+          <div className="flex gap-2 pt-4 border-t">
+            <button
+              onClick={() => removerPergunta(pergunta.id)}
+              className="flex-1 p-2 bg-red-600 text-white rounded hover:bg-red-700 flex items-center justify-center gap-2"
+            >
+              <Trash2 size={18} />Remover
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  const renderizarPergunta = (pergunta, nivel = 0) => {
+    const expandido = expandidos[pergunta.id];
+    const tipoCampo = TIPOS_CAMPO.find(t => t.id === pergunta.tipo);
+
+    return (
+      <div key={pergunta.id} className={`${nivel > 0 ? 'ml-6 border-l-2 border-gray-300 pl-4' : ''} mb-3`}>
+        <div className="bg-white border rounded p-3 hover:shadow-md transition-shadow">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3 flex-1">
+              {pergunta.perguntas_condicionais && (
+                <button
+                  onClick={() => setExpandidos({ ...expandidos, [pergunta.id]: !expandido })}
+                  className="text-gray-500"
+                >
+                  {expandido ? <ChevronDown size={18} /> : <ChevronRight size={18} />}
+                </button>
+              )}
+              
+              <div className="flex-1">
+                <div className="flex items-center gap-2">
+                  <span className="font-medium">{pergunta.texto}</span>
+                  {pergunta.obrigatorio && <span className="text-red-500 text-sm">*</span>}
+                  {pergunta.ajuda && <HelpCircle size={14} className="text-blue-500" />}
+                </div>
+                <div className="text-xs text-gray-500 mt-1">
+                  {tipoCampo?.nome} • ID: {pergunta.id}
+                </div>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2">
+              {nivel === 0 && (
+                <>
+                  <button onClick={() => moverPergunta(pergunta.id, 'up')} className="p-1 text-gray-500 hover:text-gray-700">
+                    <ArrowUp size={16} />
+                  </button>
+                  <button onClick={() => moverPergunta(pergunta.id, 'down')} className="p-1 text-gray-500 hover:text-gray-700">
+                    <ArrowDown size={16} />
+                  </button>
+                </>
+              )}
+              <button onClick={() => setEditandoPergunta(pergunta.id)} className="p-1 text-red-500 hover:text-red-700">
+                <Edit size={16} />
+              </button>
+            </div>
+          </div>
+
+          {expandido && pergunta.perguntas_condicionais && (
+            <div className="mt-3 space-y-2">
+              {Object.entries(pergunta.perguntas_condicionais).map(([resposta, subPerguntas]) => (
+                <div key={resposta} className="ml-4">
+                  <div className="flex items-center gap-2 mb-2">
+                    <span className="text-sm font-medium text-gray-600">Se resposta = "{resposta}":</span>
+                    <button
+                      onClick={() => adicionarPergunta(pergunta.id, resposta)}
+                      className="text-xs text-red-600 hover:text-red-700"
+                    >
+                      + Adicionar pergunta
+                    </button>
+                  </div>
+                  {subPerguntas.map(subP => renderizarPergunta(subP, nivel + 1))}
+                </div>
+              ))}
+              
+              {(pergunta.tipo === 'sim_nao' || pergunta.tipo === 'escolha_unica') && (
+                <button
+                  onClick={() => {
+                    const novaResposta = prompt('Qual resposta ativará as perguntas condicionais?');
+                    if (novaResposta) adicionarPergunta(pergunta.id, novaResposta);
+                  }}
+                  className="text-sm text-green-600 hover:text-green-700 ml-4"
+                >
+                  + Adicionar condição para outra resposta
+                </button>
+              )}
+            </div>
+          )}
+        </div>
+
+        {editandoPergunta === pergunta.id && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+            <div className="max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+              {renderizarEditorPergunta(pergunta)}
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  const encontrarPergunta = (perguntas, id) => {
+    for (let p of perguntas) {
+      if (p.id === id) return p;
+      if (p.perguntas_condicionais) {
+        for (let resposta in p.perguntas_condicionais) {
+          const encontrada = encontrarPergunta(p.perguntas_condicionais[resposta], id);
+          if (encontrada) return encontrada;
+        }
+      }
+    }
+    return null;
+  };
+
+  const versaoAtual = relatorioSelecionado && versaoSelecionada
+    ? config.relatorios[relatorioSelecionado]?.versoes[versaoSelecionada]
+    : null;
+
+  const perguntaEditando = editandoPergunta && versaoAtual
+    ? encontrarPergunta(versaoAtual.perguntas, editandoPergunta)
+    : null;
+
+  return (
+    <div className="min-h-screen bg-gray-50">
+      <AlertModal />
+      
+      {/* Header */}
+      <div className="bg-red-600 text-white p-4 shadow-lg">
+        <div className="max-w-7xl mx-auto flex justify-between items-center">
+          <div>
+            <h1 className="text-2xl font-bold">Editor de Relatórios - {APP_NAME}</h1>
+            <p className="text-sm text-red-100">Crie e edite estruturas de relatórios visualmente</p>
+          </div>
+          
+          <div className="flex gap-2">
+            <button
+              onClick={() => fileInputRef.current?.click()}
+              className="px-4 py-2 bg-white text-red-600 rounded hover:bg-red-50 flex items-center gap-2"
+            >
+              <Upload size={18} />Importar JSON
+            </button>
+            <button
+              onClick={exportarJSON}
+              className="px-4 py-2 bg-red-700 text-white rounded hover:bg-red-800 flex items-center gap-2"
+            >
+              <Download size={18} />Exportar JSON
+            </button>
+            <input ref={fileInputRef} type="file" accept=".json" onChange={importarJSON} className="hidden" />
+          </div>
+        </div>
+      </div>
+
+      <div className="max-w-7xl mx-auto p-4">
+        <div className="grid grid-cols-12 gap-4">
+          {/* Sidebar */}
+          <div className="col-span-3">
+            <div className="bg-white rounded-lg shadow p-4">
+              <div className="flex justify-between items-center mb-4">
+                <h2 className="font-semibold">Relatórios</h2>
+                <button onClick={adicionarRelatorio} className="p-1 text-red-600 hover:text-red-700">
+                  <Plus size={18} />
+                </button>
+              </div>
+
+              <div className="space-y-2">
+                {Object.keys(config.relatorios).length === 0 ? (
+                  <p className="text-sm text-gray-500 text-center py-4">Nenhum relatório criado</p>
+                ) : (
+                  Object.entries(config.relatorios).map(([id, relatorio]) => {
+                    const versao = relatorio.versoes[relatorio.versao_atual];
+                    const selecionado = relatorioSelecionado === id;
+                    return (
+                      <div
+                        key={id}
+                        onClick={() => {
+                          setRelatorioSelecionado(id);
+                          setVersaoSelecionada(relatorio.versao_atual);
+                        }}
+                        className={`p-3 rounded cursor-pointer border-2 transition-all ${
+                          selecionado ? 'bg-red-50 border-red-500' : 'bg-gray-50 border-transparent hover:border-gray-300'
+                        }`}
+                      >
+                        <div className="font-medium text-sm">{versao.titulo}</div>
+                        <div className="text-xs text-gray-500 mt-1">
+                          v{relatorio.versao_atual} • {versao.perguntas.length} perguntas
+                        </div>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+            </div>
+
+            {/* Configurações Gerais */}
+            <div className="bg-white rounded-lg shadow p-4 mt-4">
+              <h3 className="font-semibold mb-3 flex items-center gap-2">
+                <Settings size={18} />Configurações
+              </h3>
+              <div className="space-y-3">
+                <div>
+                  <label className="block text-sm font-medium mb-1">Versão do Sistema</label>
+                  <input
+                    type="text"
+                    value={config.versao_atual}
+                    onChange={(e) => setConfig({ ...config, versao_atual: e.target.value })}
+                    className="w-full p-2 border rounded text-sm"
+                  />
+                </div>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    id="modo_debug"
+                    checked={config.configuracoes.modo_debug}
+                    onChange={(e) => setConfig({
+                      ...config,
+                      configuracoes: { ...config.configuracoes, modo_debug: e.target.checked }
+                    })}
+                    className="rounded"
+                  />
+                  <label htmlFor="modo_debug" className="text-sm">Modo Debug</label>
+                </div>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    id="importacao_manual"
+                    checked={config.configuracoes.permitir_importacao_manual}
+                    onChange={(e) => setConfig({
+                      ...config,
+                      configuracoes: { ...config.configuracoes, permitir_importacao_manual: e.target.checked }
+                    })}
+                    className="rounded"
+                  />
+                  <label htmlFor="importacao_manual" className="text-sm">Permitir Importação Manual</label>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Área Principal */}
+          <div className="col-span-9">
+            {!relatorioSelecionado ? (
+              <div className="bg-white rounded-lg shadow p-12 text-center">
+                <FileText size={64} className="mx-auto text-gray-300 mb-4" />
+                <h3 className="text-xl font-semibold text-gray-600 mb-2">Selecione ou crie um relatório</h3>
+                <p className="text-gray-500 mb-6">Use a barra lateral para gerenciar seus relatórios</p>
+                <button
+                  onClick={adicionarRelatorio}
+                  className="px-6 py-3 bg-red-600 text-white rounded-lg hover:bg-red-700 inline-flex items-center gap-2"
+                >
+                  <Plus size={20} />Criar Primeiro Relatório
+                </button>
+              </div>
+            ) : (
+              <>
+                {/* Header do Relatório */}
+                <div className="bg-white rounded-lg shadow p-4 mb-4">
+                  <div className="flex justify-between items-start mb-4">
+                    <div className="flex-1">
+                      <input
+                        type="text"
+                        value={versaoAtual?.titulo || ''}
+                        onChange={(e) => atualizarVersao({ titulo: e.target.value })}
+                        className="text-2xl font-bold w-full border-b-2 border-transparent hover:border-gray-300 focus:border-red-500 outline-none mb-2"
+                      />
+                      <textarea
+                        value={versaoAtual?.descricao || ''}
+                        onChange={(e) => atualizarVersao({ descricao: e.target.value })}
+                        className="text-gray-600 w-full border border-transparent hover:border-gray-300 focus:border-red-500 outline-none rounded p-1"
+                        rows={2}
+                      />
+                    </div>
+
+                    <div className="flex gap-2 ml-4">
+                      <button
+                        onClick={() => setModoVisualizacao('editor')}
+                        className={`px-3 py-2 rounded ${modoVisualizacao === 'editor' ? 'bg-red-600 text-white' : 'bg-gray-200'}`}
+                      >
+                        <Edit size={18} />
+                      </button>
+                      <button
+                        onClick={() => setModoVisualizacao('preview')}
+                        className={`px-3 py-2 rounded ${modoVisualizacao === 'preview' ? 'bg-red-600 text-white' : 'bg-gray-200'}`}
+                      >
+                        <Eye size={18} />
+                      </button>
+                      <button
+                        onClick={() => setModoVisualizacao('json')}
+                        className={`px-3 py-2 rounded ${modoVisualizacao === 'json' ? 'bg-red-600 text-white' : 'bg-gray-200'}`}
+                      >
+                        <FileText size={18} />
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center justify-between text-sm text-gray-600 pt-3 border-t">
+                    <div className="flex items-center gap-4">
+                      <span>Versão: <strong>{versaoSelecionada}</strong></span>
+                      <span>Status: <strong className="text-green-600">{versaoAtual?.status}</strong></span>
+                      <span>{versaoAtual?.perguntas.length} perguntas</span>
+                    </div>
+                    <button
+                      onClick={adicionarVersao}
+                      className="px-3 py-1 bg-green-600 text-white rounded text-sm hover:bg-green-700"
+                    >
+                      Nova Versão
+                    </button>
+                  </div>
+
+                  {Object.keys(config.relatorios[relatorioSelecionado].versoes).length > 1 && (
+                    <div className="mt-3 pt-3 border-t">
+                      <details className="text-sm">
+                        <summary className="cursor-pointer text-gray-600 hover:text-gray-800 font-medium">
+                          Ver histórico de versões ({Object.keys(config.relatorios[relatorioSelecionado].versoes).length})
+                        </summary>
+                        <div className="mt-2 space-y-2">
+                          {Object.entries(config.relatorios[relatorioSelecionado].versoes)
+                            .sort((a, b) => b[0].localeCompare(a[0]))
+                            .map(([versao, dados]) => (
+                              <div
+                                key={versao}
+                                className={`p-2 rounded border ${
+                                  versao === versaoSelecionada ? 'border-red-500 bg-red-50' : 'border-gray-200'
+                                }`}
+                              >
+                                <div className="flex justify-between items-center">
+                                  <div>
+                                    <span className="font-medium">v{versao}</span>
+                                    <span className={`ml-2 text-xs px-2 py-0.5 rounded ${
+                                      dados.status === 'ativa' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-600'
+                                    }`}>
+                                      {dados.status}
+                                    </span>
+                                  </div>
+                                  <button
+                                    onClick={() => setVersaoSelecionada(versao)}
+                                    className="text-xs text-red-600 hover:text-red-700"
+                                  >
+                                    Editar
+                                  </button>
+                                </div>
+                                {dados.changelog && (
+                                  <div className="text-xs text-gray-600 mt-1">{dados.changelog}</div>
+                                )}
+                                <div className="text-xs text-gray-500 mt-1">
+                                  Criada em: {dados.data_criacao}
+                                </div>
+                              </div>
+                            ))}
+                        </div>
+                      </details>
+                    </div>
+                  )}
+                </div>
+
+                {/* Conteúdo baseado no modo */}
+                {modoVisualizacao === 'editor' && (
+                  <div className="bg-white rounded-lg shadow p-4">
+                    <div className="flex justify-between items-center mb-4">
+                      <h3 className="font-semibold">Perguntas</h3>
+                      <button
+                        onClick={() => adicionarPergunta()}
+                        className="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700 flex items-center gap-2"
+                      >
+                        <Plus size={18} />Adicionar Pergunta
+                      </button>
+                    </div>
+
+                    {versaoAtual?.perguntas.length === 0 ? (
+                      <div className="text-center py-12 text-gray-500">
+                        <AlertCircle size={48} className="mx-auto mb-4 opacity-50" />
+                        <p className="mb-4">Nenhuma pergunta adicionada</p>
+                        <button
+                          onClick={() => adicionarPergunta()}
+                          className="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700"
+                        >
+                          Adicionar primeira pergunta
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="space-y-3">
+                        {versaoAtual.perguntas.map(pergunta => renderizarPergunta(pergunta))}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {modoVisualizacao === 'preview' && (
+                  <div className="bg-white rounded-lg shadow p-6">
+                    <h3 className="font-semibold mb-4">Preview do Formulário</h3>
+                    <div className="space-y-6 max-w-2xl">
+                      {versaoAtual?.perguntas.map((pergunta, index) => (
+                        <div key={pergunta.id} className="pb-4 border-b">
+                          <div className="flex items-center gap-2 mb-2">
+                            <label className="font-medium">
+                              {index + 1}. {pergunta.texto}
+                              {pergunta.obrigatorio && <span className="text-red-500 ml-1">*</span>}
+                            </label>
+                            {pergunta.ajuda && (
+                              <HelpCircle size={16} className="text-blue-500" title={pergunta.ajuda.conteudo} />
+                            )}
+                          </div>
+
+                          {pergunta.tipo === 'texto_curto' && (
+                            <input type="text" placeholder={pergunta.placeholder} className="w-full p-2 border rounded" disabled />
+                          )}
+
+                          {pergunta.tipo === 'texto_longo' && (
+                            <textarea placeholder={pergunta.placeholder} className="w-full p-2 border rounded" rows={4} disabled />
+                          )}
+
+                          {pergunta.tipo === 'numero' && (
+                            <input type="number" className="w-full p-2 border rounded" disabled />
+                          )}
+
+                          {pergunta.tipo === 'sim_nao' && (
+                            <div className="flex gap-4">
+                              <button className="flex-1 p-3 border rounded bg-gray-50" disabled>Sim</button>
+                              <button className="flex-1 p-3 border rounded bg-gray-50" disabled>Não</button>
+                            </div>
+                          )}
+
+                          {(pergunta.tipo === 'escolha_unica' || pergunta.tipo === 'multipla_escolha') && (
+                            <div className="space-y-2">
+                              {(pergunta.opcoes || []).map((opcao, i) => (
+                                <div key={i} className="flex items-center gap-2">
+                                  <input
+                                    type={pergunta.tipo === 'escolha_unica' ? 'radio' : 'checkbox'}
+                                    disabled
+                                    className="rounded"
+                                  />
+                                  <label>{opcao}</label>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+
+                          {pergunta.tipo === 'localizacao' && (
+                            <div className="p-4 bg-gray-50 rounded">
+                              <div className="text-sm text-gray-600">
+                                <div>Latitude: -</div>
+                                <div>Longitude: -</div>
+                                <div>Precisão: -</div>
+                              </div>
+                              <button className="mt-2 px-3 py-2 bg-red-500 text-white rounded" disabled>
+                                Obter Localização
+                              </button>
+                            </div>
+                          )}
+
+                          {pergunta.tipo === 'calculado' && (
+                            <div className="p-4 bg-gray-50 rounded space-y-2">
+                              {(pergunta.campos_entrada || []).map((campo, i) => (
+                                <div key={i}>
+                                  <label className="block text-sm mb-1">{campo.texto}</label>
+                                  <input type="number" className="w-full p-2 border rounded" disabled />
+                                </div>
+                              ))}
+                              <div className="p-3 bg-blue-100 rounded text-center mt-3">
+                                <span className="font-semibold">Resultado: - {pergunta.unidade}</span>
+                              </div>
+                            </div>
+                          )}
+
+                          {pergunta.perguntas_condicionais && (
+                            <div className="mt-3 ml-4 text-sm text-gray-600">
+                              <details>
+                                <summary className="cursor-pointer">Perguntas condicionais configuradas</summary>
+                                <ul className="mt-2 list-disc ml-4">
+                                  {Object.entries(pergunta.perguntas_condicionais).map(([resposta, subPerguntas]) => (
+                                    <li key={resposta}>
+                                      Se "{resposta}": {subPerguntas.length} pergunta(s) adicional(is)
+                                    </li>
+                                  ))}
+                                </ul>
+                              </details>
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {modoVisualizacao === 'json' && (
+                  <div className="bg-white rounded-lg shadow p-4">
+                    <div className="flex justify-between items-center mb-4">
+                      <h3 className="font-semibold">Visualização JSON</h3>
+                      <button
+                        onClick={() => {
+                          navigator.clipboard.writeText(JSON.stringify(config.relatorios[relatorioSelecionado], null, 2));
+                          showAlert('✓ JSON copiado para área de transferência!');
+                        }}
+                        className="px-3 py-2 bg-gray-200 rounded hover:bg-gray-300 flex items-center gap-2"
+                      >
+                        <Copy size={16} />Copiar
+                      </button>
+                    </div>
+                    <pre className="bg-gray-900 text-green-400 p-4 rounded overflow-auto max-h-[600px] text-sm">
+                      {JSON.stringify(config.relatorios[relatorioSelecionado], null, 2)}
+                    </pre>
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* Rodapé */}
+      <div className="bg-white border-t mt-8 p-4">
+        <div className="max-w-7xl mx-auto text-center text-sm text-gray-600">
+          <p>Editor de Relatórios - {APP_NAME} • Versão {config.versao_atual}</p>
+          <p className="text-xs text-gray-500 mt-1">
+            Total de relatórios: {Object.keys(config.relatorios).length} • 
+            Última atualização: {new Date(config.data_atualizacao).toLocaleString('pt-BR')}
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+
+export default EditorWYSIWYG;
+
+
+        
+        const container = document.getElementById('root');
+        const root = ReactDOM.createRoot(container);
+        root.render(<EditorWYSIWYG />);
+    </script>
+</body>
+</html>
