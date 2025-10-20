@@ -13,6 +13,7 @@ const urlsToCache = [
   
   'https://unpkg.com/@babel/standalone/babel.min.js',
   
+  'https://unpkg.com/lucide-react@0.378.0/dist/umd/lucide-react.js'
   // Removido 'https://cdn.tailwindcss.com' para evitar erro de CORS
 ];
 
