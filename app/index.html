@@ -5,790 +5,591 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="theme-color" content="#DC2626">
     <title>NeoCheckX - Relatórios Técnicos</title>
-    <link rel="manifest" href="manifest.json">
-    <link rel="icon" type="image/png" href="icon-192.png">
+    <link rel="manifest" href="./manifest.json">
+    <link rel="icon" type="image/png" href="./icon-192.png">
     <script crossorigin src="https://unpkg.com/react@18.2.0/umd/react.production.min.js"></script>
     <script crossorigin src="https://unpkg.com/react-dom@18.2.0/umd/react-dom.production.min.js"></script>
-    <script src="https://unpkg.com/@babel/standalone@7.23.5/babel.min.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
     <script crossorigin src="https://unpkg.com/lucide-react@0.378.0/dist/umd/lucide-react.js"></script>
     <style>
-        /* Esconder avisos de desenvolvimento */
         body { margin: 0; padding: 0; font-family: system-ui, -apple-system, sans-serif; }
     </style>
 </head>
 <body>
     <div id="root"></div>
     
-    <script type="text/babel">
+    <script type="text/babel" data-type="module">
+        const { useState, useEffect, useRef } = React;
+        const { Clock, Save, FileText, Settings, Plus, FolderOpen, MapPin, Edit, HelpCircle, AlertCircle, CheckCircle, Circle, Eye, EyeOff, Trash2, RefreshCw, Copy } = lucideReact;
 
-// Substituído 'import' por desestruturação das globais
-const { useState, useEffect, useRef } = React;
-const { Clock, Save, FileText, Settings, Plus, FolderOpen, MapPin, Edit, HelpCircle, AlertCircle, CheckCircle, Circle, Eye, EyeOff, Trash2, RefreshCw, Copy } = lucideReact;
+        const APP_NAME = 'NeoCheckX';
 
-const APP_NAME = 'NeoCheckX';
-
-const RELATORIOS_PADRAO = {
-  versao_atual: "1.3.0",
-  data_atualizacao: "2025-10-17T14:30:00",
-  configuracoes: { modo_debug: true, permitir_importacao_manual: true },
-  relatorios: {
-    suporte_lentidao: {
-      versao_atual: "1.2.0",
-      versoes: {
-        "1.2.0": {
-          id: "suporte_lentidao",
-          titulo: "Suporte - Lentidão",
-          descricao: "Relatório para diagnóstico de lentidão na conexão",
-          perguntas: [
-            { id: "nome_equipe", tipo: "texto_curto", texto: "Nome da Equipe", obrigatorio: true, valor_padrao_config: "dados_tecnicos.nome_equipe" },
-            { id: "tecnico_interno", tipo: "texto_curto", texto: "Técnico Interno", obrigatorio: true, valor_padrao_config: "dados_tecnicos.tecnico_interno" },
-            { id: "placa_veiculo", tipo: "texto_curto", texto: "Placa do Veículo", obrigatorio: true, valor_padrao_config: "dados_tecnicos.placa_veiculo" },
-            { id: "tipo_veiculo", tipo: "escolha_unica", texto: "Tipo de Veículo", obrigatorio: true, valor_padrao_config: "dados_tecnicos.tipo_veiculo", opcoes: ["Carro", "Moto", "Van", "Caminhonete"] },
-            { id: "cliente_presente", tipo: "sim_nao", texto: "Cliente estava em casa?", obrigatorio: true, perguntas_condicionais: { "Sim": [{ id: "velocidade_obtida", tipo: "numero", texto: "Velocidade obtida (Mbps)", obrigatorio: true }] } }
-          ]
-        }
-      }
-    }
-  }
-};
-
-const useIndexedDB = () => {
-  const openDB = () => {
-    return new Promise((resolve, reject) => {
-      const request = indexedDB.open('RelatoriosTecnicosDB', 1);
-      request.onerror = () => reject(request.error);
-      request.onsuccess = () => resolve(request.result);
-      request.onupgradeneeded = (e) => {
-        const db = e.target.result;
-        if (!db.objectStoreNames.contains('sessoes')) db.createObjectStore('sessoes', { keyPath: 'id' });
-        if (!db.objectStoreNames.contains('configuracoes')) db.createObjectStore('configuracoes', { keyPath: 'chave' });
-        if (!db.objectStoreNames.contains('navegacao')) db.createObjectStore('navegacao', { keyPath: 'id' });
-      };
-    });
-  };
-
-  const salvarSessao = async (sessao) => {
-    const db = await openDB();
-    const tx = db.transaction(['sessoes'], 'readwrite');
-    tx.objectStore('sessoes').put(sessao);
-    return new Promise((resolve, reject) => { tx.oncomplete = resolve; tx.onerror = () => reject(tx.error); });
-  };
-
-  const carregarSessoes = async () => {
-    const db = await openDB();
-    const tx = db.transaction(['sessoes'], 'readonly');
-    const req = tx.objectStore('sessoes').getAll();
-    return new Promise((resolve, reject) => { req.onsuccess = () => resolve(req.result); req.onerror = () => reject(req.error); });
-  };
-
-  const deletarSessao = async (id) => {
-    const db = await openDB();
-    const tx = db.transaction(['sessoes'], 'readwrite');
-    tx.objectStore('sessoes').delete(id);
-    return new Promise((resolve, reject) => { tx.oncomplete = resolve; tx.onerror = () => reject(tx.error); });
-  };
-
-  const salvarConfiguracao = async (chave, valor) => {
-    const db = await openDB();
-    const tx = db.transaction(['configuracoes'], 'readwrite');
-    tx.objectStore('configuracoes').put({ chave, valor });
-    return new Promise((resolve, reject) => { tx.oncomplete = resolve; tx.onerror = () => reject(tx.error); });
-  };
-
-  const carregarConfiguracao = async (chave) => {
-    const db = await openDB();
-    const tx = db.transaction(['configuracoes'], 'readonly');
-    const req = tx.objectStore('configuracoes').get(chave);
-    return new Promise((resolve, reject) => { req.onsuccess = () => resolve(req.result?.valor); req.onerror = () => reject(req.error); });
-  };
-
-  const salvarNavegacao = async (tela, dados = null) => {
-    const db = await openDB();
-    const tx = db.transaction(['navegacao'], 'readwrite');
-    tx.objectStore('navegacao').put({ id: 'atual', tela, dados, timestamp: Date.now() });
-    return new Promise((resolve, reject) => { tx.oncomplete = resolve; tx.onerror = () => reject(tx.error); });
-  };
-
-  const carregarNavegacao = async () => {
-    const db = await openDB();
-    const tx = db.transaction(['navegacao'], 'readonly');
-    const req = tx.objectStore('navegacao').get('atual');
-    return new Promise((resolve, reject) => { req.onsuccess = () => resolve(req.result); req.onerror = () => reject(req.error); });
-  };
-
-  return { salvarSessao, carregarSessoes, deletarSessao, salvarConfiguracao, carregarConfiguracao, salvarNavegacao, carregarNavegacao };
-};
-
-const App = () => {
-  const [alert, setAlert] = useState(null);
-  const [mostrarRestaurarModal, setMostrarRestaurarModal] = useState(false);
-  const [saveStateDisponivel, setSaveStateDisponivel] = useState(null);
-  const [tela, setTela] = useState('inicio');
-  const [historico, setHistorico] = useState(['inicio']);
-  const [sessoes, setSessoes] = useState([]);
-  const [sessaoAtual, setSessaoAtual] = useState(null);
-  const [respostas, setRespostas] = useState({});
-  const [mostrarAjuda, setMostrarAjuda] = useState(null);
-  const [mostrarApenasPendentes, setMostrarApenasPendentes] = useState(false);
-  const [campoEmEdicao, setCampoEmEdicao] = useState(null);
-  const [salvando, setSalvando] = useState(false);
-  const [relatorioGerado, setRelatorioGerado] = useState(null);
-  const [tempoGasto, setTempoGasto] = useState(0);
-  const [configs, setConfigs] = useState({ dados_tecnicos: { nome_equipe: '', tecnico_interno: '', placa_veiculo: '', tipo_veiculo: '' } });
-  const [configJSON, setConfigJSON] = useState(RELATORIOS_PADRAO);
-  const [editandoLocalizacao, setEditandoLocalizacao] = useState(false);
-  const [modoManualHeader, setModoManualHeader] = useState(false);
-
-  const db = useIndexedDB();
-  const intervaloTempo = useRef(null);
-  const primeiroItemPendenteRef = useRef(null);
-
-  const showAlert = (msg) => setAlert(msg);
-
-  const AlertModal = () => {
-    if (!alert) return null;
-    return (
-      <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-        <div className="bg-white rounded-lg shadow-xl max-w-md w-full p-6">
-          <div className="flex items-center gap-3 mb-4">
-            <div className="w-10 h-10 bg-red-100 rounded-full flex items-center justify-center">
-              <AlertCircle size={24} className="text-red-600" />
-            </div>
-            <h3 className="text-lg font-semibold">{APP_NAME} diz:</h3>
-          </div>
-          <p className="text-gray-700 mb-6 whitespace-pre-line">{alert}</p>
-          <button onClick={() => setAlert(null)} className="w-full p-3 bg-red-600 text-white rounded hover:bg-red-700">OK</button>
-        </div>
-      </div>
-    );
-  };
-
-  const RestaurarModal = () => {
-    if (!mostrarRestaurarModal || !saveStateDisponivel) return null;
-    
-    const getNomeTela = () => {
-      if (saveStateDisponivel.tela === 'formulario' && saveStateDisponivel.dados?.sessaoAtual) {
-        return `relatório "${saveStateDisponivel.dados.sessaoAtual.estrutura.titulo}"`;
-      }
-      const nomes = {
-        'novo_relatorio': 'seleção de relatório',
-        'sessoes': 'sessões salvas',
-        'configuracoes': 'configurações'
-      };
-      return nomes[saveStateDisponivel.tela] || 'última tela';
-    };
-
-    return (
-      <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-        <div className="bg-white rounded-lg shadow-xl max-w-md w-full p-6">
-          <div className="flex items-center gap-3 mb-4">
-            <div className="w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center">
-              <Clock size={28} className="text-blue-600" />
-            </div>
-            <h3 className="text-xl font-semibold">Restaurar Sessão</h3>
-          </div>
-          <p className="text-gray-700 mb-6">
-            Detectamos que você estava trabalhando no {getNomeTela()}.
-            <br /><br />
-            Deseja continuar de onde parou?
-          </p>
-          <div className="flex gap-3">
-            <button 
-              onClick={limparSaveState} 
-              className="flex-1 p-3 bg-gray-200 text-gray-800 rounded hover:bg-gray-300 font-medium"
-            >
-              Não
-            </button>
-            <button 
-              onClick={restaurarSaveState} 
-              className="flex-1 p-3 bg-red-600 text-white rounded hover:bg-red-700 font-medium"
-            >
-              Sim, continuar
-            </button>
-          </div>
-          <p className="text-xs text-gray-500 mt-3 text-center">
-            Último acesso: {new Date(saveStateDisponivel.timestamp).toLocaleString('pt-BR')}
-          </p>
-        </div>
-      </div>
-    );
-  };
-
-  useEffect(() => {
-    const carregar = async () => {
-      try {
-        const response = await fetch('/NeoCheckX/relatorios.json');
-        const dados = await response.json();
-        setConfigJSON(dados);
-        await db.salvarConfiguracao('relatorios_json', dados);
-      } catch (error) {
-        const salvo = await db.carregarConfiguracao('relatorios_json');
-        if (salvo) setConfigJSON(salvo);
-      }
-    };
-    carregar();
-  }, []);
-
-  // Verificar savestate ao iniciar
-  useEffect(() => {
-    const verificarSaveState = async () => {
-      const nav = await db.carregarNavegacao();
-      // Verificar se há um savestate recente (menos de 24h)
-      if (nav && nav.tela !== 'inicio' && Date.now() - nav.timestamp < 86400000) {
-        setSaveStateDisponivel(nav);
-        setMostrarRestaurarModal(true);
-      }
-    };
-    verificarSaveState();
-  }, []);
-
-  const restaurarSaveState = async () => {
-    if (saveStateDisponivel) {
-      setTela(saveStateDisponivel.tela);
-      if (saveStateDisponivel.dados?.sessaoAtual) {
-        setSessaoAtual(saveStateDisponivel.dados.sessaoAtual);
-      }
-      if (saveStateDisponivel.dados?.respostas) {
-        setRespostas(saveStateDisponivel.dados.respostas);
-      }
-      // Restaurar histórico se possível
-      if (saveStateDisponivel.dados?.historico) {
-        setHistorico(saveStateDisponivel.dados.historico);
-      }
-    }
-    setMostrarRestaurarModal(false);
-  };
-
-  const limparSaveState = async () => {
-    await db.salvarNavegacao('inicio', null);
-    setSaveStateDisponivel(null);
-    setMostrarRestaurarModal(false);
-    setTela('inicio');
-    setHistorico(['inicio']);
-  };
-
-  useEffect(() => {
-    db.salvarNavegacao(tela, { 
-      sessaoAtual, 
-      respostas: tela === 'formulario' ? respostas : null,
-      historico,
-      timestamp: Date.now()
-    });
-  }, [tela, sessaoAtual, historico]);
-
-  useEffect(() => {
-    const carregar = async () => {
-      const salvas = await db.carregarConfiguracao('dados_tecnicos');
-      if (salvas) setConfigs({ dados_tecnicos: salvas });
-    };
-    carregar();
-  }, []);
-
-  useEffect(() => {
-    if (tela === 'formulario' && sessaoAtual) {
-      intervaloTempo.current = setInterval(() => setTempoGasto(p => p + 1), 1000);
-      return () => {
-        if (intervaloTempo.current) clearInterval(intervaloTempo.current);
-        if (sessaoAtual) {
-          db.salvarSessao({
-            ...sessaoAtual,
-            tempo_gasto: { ...sessaoAtual.tempo_gasto, total_segundos: (sessaoAtual.tempo_gasto?.total_segundos || 0) + tempoGasto }
-          });
-        }
-      };
-    }
-  }, [tela, sessaoAtual]);
-
-  useEffect(() => {
-    const handle = () => {
-      if (document.hidden && tela === 'formulario' && sessaoAtual) {
-        db.salvarSessao({
-          ...sessaoAtual,
-          tempo_gasto: { ...sessaoAtual.tempo_gasto, total_segundos: (sessaoAtual.tempo_gasto?.total_segundos || 0) + tempoGasto },
-          timestamps: { ...sessaoAtual.timestamps, ultima_edicao: new Date().toISOString() }
-        });
-        setTempoGasto(0);
-      }
-    };
-    document.addEventListener('visibilitychange', handle);
-    return () => document.removeEventListener('visibilitychange', handle);
-  }, [tela, sessaoAtual, tempoGasto]);
-
-  const navegarPara = (novaTela) => {
-    setHistorico(p => [...p, tela]);
-    setTela(novaTela);
-  };
-
-  const voltar = () => {
-    if (historico.length > 1) {
-      const novo = [...historico];
-      novo.pop();
-      const anterior = novo[novo.length - 1];
-      setHistorico(novo);
-      setTela(anterior);
-    }
-  };
-
-  useEffect(() => {
-    const handle = (e) => { e.preventDefault(); voltar(); };
-    window.history.pushState(null, '', window.location.href);
-    window.addEventListener('popstate', handle);
-    return () => window.removeEventListener('popstate', handle);
-  }, [historico]);
-
-  useEffect(() => {
-    if (sessaoAtual && Object.keys(respostas).length > 0) {
-      const salvar = async () => {
-        setSalvando(true);
-        await db.salvarSessao({
-          ...sessaoAtual,
-          respostas,
-          tempo_gasto: { total_segundos: (sessaoAtual.tempo_gasto?.total_segundos || 0) + tempoGasto },
-          timestamps: { ...sessaoAtual.timestamps, ultima_edicao: new Date().toISOString() }
-        });
-        setTimeout(() => setSalvando(false), 500);
-      };
-      const t = setTimeout(salvar, 1000);
-      return () => clearTimeout(t);
-    }
-  }, [respostas]);
-
-  const formatarTempo = (s) => {
-    const h = Math.floor(s / 3600);
-    const m = Math.floor((s % 3600) / 60);
-    const sec = s % 60;
-    if (h > 0) return `${h}h ${m}min`;
-    if (m > 0) return `${m}min ${sec}s`;
-    return `${sec}s`;
-  };
-
-  const forcarAtualizacao = async () => {
-    try {
-      setSalvando(true);
-      const response = await fetch('/NeoCheckX/relatorios.json?t=' + Date.now());
-      const novo = await response.json();
-      setConfigJSON(novo);
-      await db.salvarConfiguracao('relatorios_json', novo);
-      showAlert('✓ Relatórios atualizados!\n\nVersão: ' + novo.versao_atual);
-    } catch (error) {
-      showAlert('❌ Erro ao atualizar:\n' + error.message);
-    } finally {
-      setSalvando(false);
-    }
-  };
-
-  const iniciarNovaSessao = (tipo) => {
-    const rel = configJSON.relatorios[tipo];
-    const ver = rel.versao_atual;
-    const est = rel.versoes[ver];
-    const agora = new Date();
-    const nova = {
-      id: `sessao_${agora.getTime()}_${tipo}`,
-      tipo_relatorio: tipo,
-      versao_relatorio: ver,
-      status: 'em_andamento',
-      timestamps: { criacao: agora.toISOString(), ultima_edicao: agora.toISOString() },
-      tempo_gasto: { total_segundos: 0 },
-      respostas: {},
-      estrutura: est
-    };
-    const resps = {};
-    est.perguntas.forEach(p => {
-      if (p.valor_padrao_config) {
-        const c = p.valor_padrao_config.split('.')[1];
-        if (configs.dados_tecnicos[c]) resps[p.id] = { valor: configs.dados_tecnicos[c], timestamp: agora.toISOString() };
-      }
-    });
-    setSessaoAtual(nova);
-    setRespostas(resps);
-    setTempoGasto(0);
-    navegarPara('formulario');
-  };
-
-  const reabrirSessao = async (id) => {
-    const salvas = await db.carregarSessoes();
-    const s = salvas.find(x => x.id === id);
-    if (s) {
-      setSessaoAtual(s);
-      setRespostas(s.respostas || {});
-      setTempoGasto(0);
-      navegarPara('formulario');
-    }
-  };
-
-  const obterLocalizacao = () => {
-    if ('geolocation' in navigator) {
-      navigator.geolocation.getCurrentPosition(
-        (p) => setRespostas(prev => ({ ...prev, localizacao_atendimento: { valor: { latitude: p.coords.latitude, longitude: p.coords.longitude, precisao: p.coords.accuracy, metodo_obtencao: 'automatico', editado_manualmente: false, timestamp: new Date().toISOString() }, timestamp: new Date().toISOString() } })),
-        (e) => showAlert('Erro ao obter localização: ' + e.message)
-      );
-    } else {
-      showAlert('Geolocalização não disponível');
-    }
-  };
-
-  const irParaPrimeiroPendente = () => {
-    const encontrar = (pergs) => {
-      for (let p of pergs) {
-        if (p.obrigatorio && !respostas[p.id]?.valor) return p.id;
-        if (p.perguntas_condicionais && respostas[p.id]?.valor) {
-          const sub = p.perguntas_condicionais[respostas[p.id].valor];
-          if (sub) {
-            const pend = encontrar(sub);
-            if (pend) return pend;
+        const RELATORIOS_PADRAO = {
+          versao_atual: "1.3.0",
+          data_atualizacao: "2025-10-17T14:30:00",
+          configuracoes: { modo_debug: true, permitir_importacao_manual: true },
+          relatorios: {
+            suporte_lentidao: {
+              versao_atual: "1.2.0",
+              versoes: {
+                "1.2.0": {
+                  id: "suporte_lentidao",
+                  titulo: "Suporte - Lentidão",
+                  descricao: "Relatório para diagnóstico de lentidão na conexão",
+                  perguntas: [
+                    { id: "nome_equipe", tipo: "texto_curto", texto: "Nome da Equipe", obrigatorio: true, valor_padrao_config: "dados_tecnicos.nome_equipe" },
+                    { id: "tecnico_interno", tipo: "texto_curto", texto: "Técnico Interno", obrigatorio: true, valor_padrao_config: "dados_tecnicos.tecnico_interno" },
+                    { id: "placa_veiculo", tipo: "texto_curto", texto: "Placa do Veículo", obrigatorio: true, valor_padrao_config: "dados_tecnicos.placa_veiculo" },
+                    { id: "tipo_veiculo", tipo: "escolha_unica", texto: "Tipo de Veículo", obrigatorio: true, valor_padrao_config: "dados_tecnicos.tipo_veiculo", opcoes: ["Carro", "Moto", "Van", "Caminhonete"] },
+                    { id: "cliente_presente", tipo: "sim_nao", texto: "Cliente estava em casa?", obrigatorio: true, perguntas_condicionais: { "Sim": [{ id: "velocidade_obtida", tipo: "numero", texto: "Velocidade obtida (Mbps)", obrigatorio: true }] } }
+                  ]
+                }
+              }
+            }
           }
-        }
-      }
-      return null;
-    };
-    const pend = encontrar(sessaoAtual.estrutura.perguntas);
-    if (pend) {
-      primeiroItemPendenteRef.current = pend;
-      setTimeout(() => {
-        const el = document.getElementById(`campo-${pend}`);
-        if (el) {
-          el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-          const inp = el.querySelector('input, textarea, button');
-          if (inp) inp.focus();
-        }
-      }, 100);
-    } else {
-      showAlert('✓ Não há campos pendentes!');
-    }
-  };
+        };
 
-  const renderizarCampo = (p, nivel = 0) => {
-    const resp = respostas[p.id];
-    const val = resp?.valor;
-    const erro = p.obrigatorio && !val;
-    const emEd = campoEmEdicao === p.id;
-    const ehPend = primeiroItemPendenteRef.current === p.id;
+        const useIndexedDB = () => {
+          const openDB = () => {
+            return new Promise((resolve, reject) => {
+              const request = indexedDB.open('RelatoriosTecnicosDB', 1);
+              request.onerror = () => reject(request.error);
+              request.onsuccess = () => resolve(request.result);
+              request.onupgradeneeded = (e) => {
+                const db = e.target.result;
+                if (!db.objectStoreNames.contains('sessoes')) db.createObjectStore('sessoes', { keyPath: 'id' });
+                if (!db.objectStoreNames.contains('configuracoes')) db.createObjectStore('configuracoes', { keyPath: 'chave' });
+                if (!db.objectStoreNames.contains('navegacao')) db.createObjectStore('navegacao', { keyPath: 'id' });
+              };
+            });
+          };
 
-    if (mostrarApenasPendentes && !erro && val && !emEd) return null;
+          const salvarSessao = async (sessao) => {
+            const db = await openDB();
+            const tx = db.transaction(['sessoes'], 'readwrite');
+            tx.objectStore('sessoes').put(sessao);
+            return new Promise((resolve, reject) => { tx.oncomplete = resolve; tx.onerror = () => reject(tx.error); });
+          };
 
-    const atualizar = (v) => setRespostas(prev => ({ ...prev, [p.id]: { valor: v, timestamp: new Date().toISOString() } }));
-    const focus = () => setCampoEmEdicao(p.id);
-    const blur = () => setCampoEmEdicao(null);
+          const carregarSessoes = async () => {
+            const db = await openDB();
+            const tx = db.transaction(['sessoes'], 'readonly');
+            const req = tx.objectStore('sessoes').getAll();
+            return new Promise((resolve, reject) => { req.onsuccess = () => resolve(req.result); req.onerror = () => reject(req.error); });
+          };
 
-    let campo = null;
+          const deletarSessao = async (id) => {
+            const db = await openDB();
+            const tx = db.transaction(['sessoes'], 'readwrite');
+            tx.objectStore('sessoes').delete(id);
+            return new Promise((resolve, reject) => { tx.oncomplete = resolve; tx.onerror = () => reject(tx.error); });
+          };
 
-    if (p.tipo === 'texto_curto') {
-      campo = <input type="text" value={val || ''} onChange={(e) => atualizar(e.target.value)} onFocus={focus} onBlur={blur} className={`w-full p-2 border rounded ${erro ? 'border-orange-500 bg-orange-50' : val ? 'border-green-500 bg-green-50' : 'border-gray-300'}`} placeholder={p.placeholder} />;
-    } else if (p.tipo === 'texto_longo') {
-      campo = <textarea value={val || ''} onChange={(e) => atualizar(e.target.value)} onFocus={focus} onBlur={blur} className={`w-full p-2 border rounded ${erro ? 'border-orange-500 bg-orange-50' : val ? 'border-green-500 bg-green-50' : 'border-gray-300'}`} rows={4} placeholder={p.placeholder} />;
-    } else if (p.tipo === 'sim_nao') {
-      campo = (
-        <div className="flex gap-4">
-          <button onClick={() => { atualizar('Sim'); blur(); }} className={`flex-1 p-3 border rounded ${val === 'Sim' ? 'bg-green-500 text-white' : 'bg-white'}`}>Sim</button>
-          <button onClick={() => { atualizar('Não'); blur(); }} className={`flex-1 p-3 border rounded ${val === 'Não' ? 'bg-red-500 text-white' : 'bg-white'}`}>Não</button>
-        </div>
-      );
-    } else if (p.tipo === 'escolha_unica') {
-      campo = (
-        <div className="space-y-2">
-          {(p.opcoes || []).map(op => (
-            <button key={op} onClick={() => { atualizar(op); blur(); }} className={`w-full p-3 border rounded text-left ${val === op ? 'bg-red-500 text-white' : 'bg-white'}`}>{op}</button>
-          ))}
-        </div>
-      );
-    } else if (p.tipo === 'numero') {
-      campo = <input type="number" value={val || ''} onChange={(e) => atualizar(parseFloat(e.target.value) || '')} onFocus={focus} onBlur={blur} className={`w-full p-2 border rounded ${erro ? 'border-orange-500 bg-orange-50' : val ? 'border-green-500 bg-green-50' : 'border-gray-300'}`} />;
-    }
+          const salvarConfiguracao = async (chave, valor) => {
+            const db = await openDB();
+            const tx = db.transaction(['configuracoes'], 'readwrite');
+            tx.objectStore('configuracoes').put({ chave, valor });
+            return new Promise((resolve, reject) => { tx.oncomplete = resolve; tx.onerror = () => reject(tx.error); });
+          };
 
-    return (
-      <div key={p.id} id={`campo-${p.id}`} className={`mb-6 ${nivel > 0 ? 'ml-6 pl-4 border-l-2 border-gray-300' : ''} ${ehPend ? 'ring-2 ring-red-400 rounded p-2' : ''}`}>
-        <div className="flex items-center gap-2 mb-2">
-          {erro ? <AlertCircle size={18} className="text-orange-500" /> : val ? <CheckCircle size={18} className="text-green-500" /> : <Circle size={18} className="text-gray-400" />}
-          <label className="font-medium">{p.texto}{p.obrigatorio && <span className="text-red-500 ml-1">*</span>}</label>
-          {p.ajuda && <button onClick={() => setMostrarAjuda(p)} className="ml-2 text-blue-500"><HelpCircle size={18} /></button>}
-        </div>
-        {campo}
-        {p.perguntas_condicionais && val && p.perguntas_condicionais[val] && (
-          <div className="mt-4 space-y-4">{p.perguntas_condicionais[val].map(sub => renderizarCampo(sub, nivel + 1))}</div>
-        )}
-      </div>
-    );
-  };
+          const carregarConfiguracao = async (chave) => {
+            const db = await openDB();
+            const tx = db.transaction(['configuracoes'], 'readonly');
+            const req = tx.objectStore('configuracoes').get(chave);
+            return new Promise((resolve, reject) => { req.onsuccess = () => resolve(req.result?.valor); req.onerror = () => reject(req.error); });
+          };
 
-  const gerarRelatorio = () => {
-    const obrig = [];
-    const verificar = (pergs) => {
-      pergs.forEach(p => {
-        if (p.obrigatorio && !respostas[p.id]?.valor) obrig.push(p.texto);
-        if (p.perguntas_condicionais && respostas[p.id]?.valor) {
-          const sub = p.perguntas_condicionais[respostas[p.id].valor];
-          if (sub) verificar(sub);
-        }
-      });
-    };
-    verificar(sessaoAtual.estrutura.perguntas);
-    if (obrig.length > 0) {
-      showAlert(`Campos obrigatórios:\n\n• ${obrig.join('\n• ')}`);
-      setMostrarApenasPendentes(true);
-      return;
-    }
+          const salvarNavegacao = async (tela, dados = null) => {
+            const db = await openDB();
+            const tx = db.transaction(['navegacao'], 'readwrite');
+            tx.objectStore('navegacao').put({ id: 'atual', tela, dados, timestamp: Date.now() });
+            return new Promise((resolve, reject) => { tx.oncomplete = resolve; tx.onerror = () => reject(tx.error); });
+          };
 
-    let rel = '==========================================\n';
-    rel += `RELATÓRIO: ${sessaoAtual.estrutura.titulo.toUpperCase()}\n`;
-    rel += '==========================================\n\n';
-    rel += `Iniciado: ${new Date(sessaoAtual.timestamps.criacao).toLocaleString('pt-BR')}\n`;
-    rel += `Finalizado: ${new Date().toLocaleString('pt-BR')}\n`;
-    rel += `Tempo total: ${formatarTempo((sessaoAtual.tempo_gasto?.total_segundos || 0) + tempoGasto)}\n`;
-    rel += `Técnico: ${respostas.tecnico_interno?.valor || 'N/A'}\n`;
-    rel += `Equipe: ${respostas.nome_equipe?.valor || 'N/A'}\n\n`;
+          const carregarNavegacao = async () => {
+            const db = await openDB();
+            const tx = db.transaction(['navegacao'], 'readonly');
+            const req = tx.objectStore('navegacao').get('atual');
+            return new Promise((resolve, reject) => { req.onsuccess = () => resolve(req.result); req.onerror = () => reject(req.error); });
+          };
 
-    const formatar = (p) => {
-      const r = respostas[p.id];
-      if (!r?.valor) return '';
-      let txt = `${p.texto}: ${r.valor}\n`;
-      if (p.perguntas_condicionais && p.perguntas_condicionais[r.valor]) {
-        p.perguntas_condicionais[r.valor].forEach(sub => txt += formatar(sub));
-      }
-      return txt;
-    };
+          return { salvarSessao, carregarSessoes, deletarSessao, salvarConfiguracao, carregarConfiguracao, salvarNavegacao, carregarNavegacao };
+        };
 
-    sessaoAtual.estrutura.perguntas.forEach(p => rel += formatar(p));
-    rel += '\n==========================================\n';
-    navigator.clipboard.writeText(rel);
-    setRelatorioGerado(rel);
-  };
+        const App = () => {
+          const [alert, setAlert] = useState(null);
+          const [mostrarRestaurarModal, setMostrarRestaurarModal] = useState(false);
+          const [saveStateDisponivel, setSaveStateDisponivel] = useState(null);
+          const [tela, setTela] = useState('inicio');
+          const [historico, setHistorico] = useState(['inicio']);
+          const [sessoes, setSessoes] = useState([]);
+          const [sessaoAtual, setSessaoAtual] = useState(null);
+          const [respostas, setRespostas] = useState({});
+          const [mostrarAjuda, setMostrarAjuda] = useState(null);
+          const [mostrarApenasPendentes, setMostrarApenasPendentes] = useState(false);
+          const [campoEmEdicao, setCampoEmEdicao] = useState(null);
+          const [salvando, setSalvando] = useState(false);
+          const [relatorioGerado, setRelatorioGerado] = useState(null);
+          const [tempoGasto, setTempoGasto] = useState(0);
+          const [configs, setConfigs] = useState({ dados_tecnicos: { nome_equipe: '', tecnico_interno: '', placa_veiculo: '', tipo_veiculo: '' } });
+          const [configJSON, setConfigJSON] = useState(RELATORIOS_PADRAO);
 
-  if (tela === 'inicio') {
-    return (
-      <div className="min-h-screen bg-gradient-to-br from-red-50 to-pink-100 p-4">
-        <AlertModal />
-        <RestaurarModal />
-        <div className="max-w-md mx-auto pt-20">
-          <div className="text-center mb-12">
-            <FileText size={64} className="mx-auto mb-4 text-red-600" />
-            <h1 className="text-3xl font-bold mb-2">{APP_NAME}</h1>
-            <p className="text-gray-600">Sistema offline para visitas técnicas</p>
-          </div>
-          <div className="space-y-4">
-            <button onClick={() => navegarPara('novo_relatorio')} className="w-full p-4 bg-red-600 text-white rounded-lg shadow-lg hover:bg-red-700 flex items-center justify-center gap-3">
-              <Plus size={24} />Nova Sessão
-            </button>
-            <button onClick={async () => { setSessoes(await db.carregarSessoes()); navegarPara('sessoes'); }} className="w-full p-4 bg-white text-red-600 rounded-lg shadow-lg border-2 border-red-600 flex items-center justify-center gap-3">
-              <FolderOpen size={24} />Reabrir Sessão
-            </button>
-            <button onClick={() => navegarPara('configuracoes')} className="w-full p-4 bg-white rounded-lg shadow flex items-center justify-center gap-3">
-              <Settings size={20} />Configurações
-            </button>
-          </div>
-          <div className="mt-8 text-center text-sm text-gray-500">v{configJSON.versao_atual}</div>
-        </div>
-      </div>
-    );
-  }
+          const db = useIndexedDB();
+          const intervaloTempo = useRef(null);
+          const primeiroItemPendenteRef = useRef(null);
 
-  if (tela === 'novo_relatorio') {
-    return (
-      <div className="min-h-screen bg-gray-50 p-4">
-        <AlertModal />
-        <div className="max-w-2xl mx-auto">
-          <button onClick={voltar} className="text-red-600 mb-4">← Voltar</button>
-          <h2 className="text-2xl font-bold mb-6">Selecione o tipo de relatório</h2>
-          <div className="space-y-4">
-            {Object.entries(configJSON.relatorios).map(([id, r]) => {
-              const e = r.versoes[r.versao_atual];
-              return (
-                <button key={id} onClick={() => iniciarNovaSessao(id)} className="w-full p-6 bg-white rounded-lg shadow hover:shadow-lg text-left">
-                  <h3 className="text-xl font-semibold mb-2">{e.titulo}</h3>
-                  <p className="text-gray-600 text-sm">{e.descricao}</p>
-                </button>
+          const showAlert = (msg) => setAlert(msg);
+
+          const AlertModal = () => {
+            if (!alert) return null;
+            return (
+              <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+                <div className="bg-white rounded-lg shadow-xl max-w-md w-full p-6">
+                  <div className="flex items-center gap-3 mb-4">
+                    <div className="w-10 h-10 bg-red-100 rounded-full flex items-center justify-center">
+                      <AlertCircle size={24} className="text-red-600" />
+                    </div>
+                    <h3 className="text-lg font-semibold">{APP_NAME} diz:</h3>
+                  </div>
+                  <p className="text-gray-700 mb-6 whitespace-pre-line">{alert}</p>
+                  <button onClick={() => setAlert(null)} className="w-full p-3 bg-red-600 text-white rounded hover:bg-red-700">OK</button>
+                </div>
+              </div>
+            );
+          };
+
+          const RestaurarModal = () => {
+            if (!mostrarRestaurarModal || !saveStateDisponivel) return null;
+            
+            const getNomeTela = () => {
+              if (saveStateDisponivel.tela === 'formulario' && saveStateDisponivel.dados?.sessaoAtual) {
+                return `relatório "${saveStateDisponivel.dados.sessaoAtual.estrutura.titulo}"`;
+              }
+              const nomes = {
+                'novo_relatorio': 'seleção de relatório',
+                'sessoes': 'sessões salvas',
+                'configuracoes': 'configurações'
+              };
+              return nomes[saveStateDisponivel.tela] || 'última tela';
+            };
+
+            return (
+              <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+                <div className="bg-white rounded-lg shadow-xl max-w-md w-full p-6">
+                  <div className="flex items-center gap-3 mb-4">
+                    <div className="w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center">
+                      <Clock size={28} className="text-blue-600" />
+                    </div>
+                    <h3 className="text-xl font-semibold">Restaurar Sessão</h3>
+                  </div>
+                  <p className="text-gray-700 mb-6">
+                    Detectamos que você estava trabalhando no {getNomeTela()}.
+                    <br /><br />
+                    Deseja continuar de onde parou?
+                  </p>
+                  <div className="flex gap-3">
+                    <button 
+                      onClick={limparSaveState} 
+                      className="flex-1 p-3 bg-gray-200 text-gray-800 rounded hover:bg-gray-300 font-medium"
+                    >
+                      Não
+                    </button>
+                    <button 
+                      onClick={restaurarSaveState} 
+                      className="flex-1 p-3 bg-red-600 text-white rounded hover:bg-red-700 font-medium"
+                    >
+                      Sim, continuar
+                    </button>
+                  </div>
+                  <p className="text-xs text-gray-500 mt-3 text-center">
+                    Último acesso: {new Date(saveStateDisponivel.timestamp).toLocaleString('pt-BR')}
+                  </p>
+                </div>
+              </div>
+            );
+          };
+
+          useEffect(() => {
+            const carregar = async () => {
+              try {
+                const baseUrl = window.location.pathname.includes('/NeoCheckX/') 
+                  ? '/NeoCheckX/' 
+                  : './';
+                const response = await fetch(`${baseUrl}relatorios.json`);
+                const dados = await response.json();
+                setConfigJSON(dados);
+                await db.salvarConfiguracao('relatorios_json', dados);
+              } catch (error) {
+                console.log('Usando dados padrão:', error);
+                const salvo = await db.carregarConfiguracao('relatorios_json');
+                if (salvo) setConfigJSON(salvo);
+              }
+            };
+            carregar();
+          }, []);
+
+          useEffect(() => {
+            const verificarSaveState = async () => {
+              const nav = await db.carregarNavegacao();
+              if (nav && nav.tela !== 'inicio' && Date.now() - nav.timestamp < 86400000) {
+                setSaveStateDisponivel(nav);
+                setMostrarRestaurarModal(true);
+              }
+            };
+            verificarSaveState();
+          }, []);
+
+          const restaurarSaveState = async () => {
+            if (saveStateDisponivel) {
+              setTela(saveStateDisponivel.tela);
+              if (saveStateDisponivel.dados?.sessaoAtual) {
+                setSessaoAtual(saveStateDisponivel.dados.sessaoAtual);
+              }
+              if (saveStateDisponivel.dados?.respostas) {
+                setRespostas(saveStateDisponivel.dados.respostas);
+              }
+              if (saveStateDisponivel.dados?.historico) {
+                setHistorico(saveStateDisponivel.dados.historico);
+              }
+            }
+            setMostrarRestaurarModal(false);
+          };
+
+          const limparSaveState = async () => {
+            await db.salvarNavegacao('inicio', null);
+            setSaveStateDisponivel(null);
+            setMostrarRestaurarModal(false);
+            setTela('inicio');
+            setHistorico(['inicio']);
+          };
+
+          useEffect(() => {
+            db.salvarNavegacao(tela, { 
+              sessaoAtual, 
+              respostas: tela === 'formulario' ? respostas : null,
+              historico,
+              timestamp: Date.now()
+            });
+          }, [tela, sessaoAtual, historico]);
+
+          useEffect(() => {
+            const carregar = async () => {
+              const salvas = await db.carregarConfiguracao('dados_tecnicos');
+              if (salvas) setConfigs({ dados_tecnicos: salvas });
+            };
+            carregar();
+          }, []);
+
+          const navegarPara = (novaTela) => {
+            setHistorico(p => [...p, tela]);
+            setTela(novaTela);
+          };
+
+          const voltar = () => {
+            if (historico.length > 1) {
+              const novo = [...historico];
+              novo.pop();
+              const anterior = novo[novo.length - 1];
+              setHistorico(novo);
+              setTela(anterior);
+            }
+          };
+
+          const iniciarNovaSessao = (tipo) => {
+            const rel = configJSON.relatorios[tipo];
+            const ver = rel.versao_atual;
+            const est = rel.versoes[ver];
+            const agora = new Date();
+            const nova = {
+              id: `sessao_${agora.getTime()}_${tipo}`,
+              tipo_relatorio: tipo,
+              versao_relatorio: ver,
+              status: 'em_andamento',
+              timestamps: { criacao: agora.toISOString(), ultima_edicao: agora.toISOString() },
+              tempo_gasto: { total_segundos: 0 },
+              respostas: {},
+              estrutura: est
+            };
+            const resps = {};
+            est.perguntas.forEach(p => {
+              if (p.valor_padrao_config) {
+                const c = p.valor_padrao_config.split('.')[1];
+                if (configs.dados_tecnicos[c]) resps[p.id] = { valor: configs.dados_tecnicos[c], timestamp: agora.toISOString() };
+              }
+            });
+            setSessaoAtual(nova);
+            setRespostas(resps);
+            setTempoGasto(0);
+            navegarPara('formulario');
+          };
+
+          const formatarTempo = (s) => {
+            const h = Math.floor(s / 3600);
+            const m = Math.floor((s % 3600) / 60);
+            const sec = s % 60;
+            if (h > 0) return `${h}h ${m}min`;
+            if (m > 0) return `${m}min ${sec}s`;
+            return `${sec}s`;
+          };
+
+          const renderizarCampo = (p, nivel = 0) => {
+            const resp = respostas[p.id];
+            const val = resp?.valor;
+            const erro = p.obrigatorio && !val;
+            const emEd = campoEmEdicao === p.id;
+            const ehPend = primeiroItemPendenteRef.current === p.id;
+
+            if (mostrarApenasPendentes && !erro && val && !emEd) return null;
+
+            const atualizar = (v) => setRespostas(prev => ({ ...prev, [p.id]: { valor: v, timestamp: new Date().toISOString() } }));
+            const focus = () => setCampoEmEdicao(p.id);
+            const blur = () => setCampoEmEdicao(null);
+
+            let campo = null;
+
+            if (p.tipo === 'texto_curto') {
+              campo = <input type="text" value={val || ''} onChange={(e) => atualizar(e.target.value)} onFocus={focus} onBlur={blur} className={`w-full p-2 border rounded ${erro ? 'border-orange-500 bg-orange-50' : val ? 'border-green-500 bg-green-50' : 'border-gray-300'}`} placeholder={p.placeholder} />;
+            } else if (p.tipo === 'sim_nao') {
+              campo = (
+                <div className="flex gap-4">
+                  <button onClick={() => { atualizar('Sim'); blur(); }} className={`flex-1 p-3 border rounded ${val === 'Sim' ? 'bg-green-500 text-white' : 'bg-white'}`}>Sim</button>
+                  <button onClick={() => { atualizar('Não'); blur(); }} className={`flex-1 p-3 border rounded ${val === 'Não' ? 'bg-red-500 text-white' : 'bg-white'}`}>Não</button>
+                </div>
               );
-            })}
-          </div>
-        </div>
-      </div>
-    );
-  }
+            } else if (p.tipo === 'escolha_unica') {
+              campo = (
+                <div className="space-y-2">
+                  {(p.opcoes || []).map(op => (
+                    <button key={op} onClick={() => { atualizar(op); blur(); }} className={`w-full p-3 border rounded text-left ${val === op ? 'bg-red-500 text-white' : 'bg-white'}`}>{op}</button>
+                  ))}
+                </div>
+              );
+            } else if (p.tipo === 'numero') {
+              campo = <input type="number" value={val || ''} onChange={(e) => atualizar(parseFloat(e.target.value) || '')} onFocus={focus} onBlur={blur} className={`w-full p-2 border rounded ${erro ? 'border-orange-500 bg-orange-50' : val ? 'border-green-500 bg-green-50' : 'border-gray-300'}`} />;
+            }
 
-  if (tela === 'sessoes') {
-    return (
-      <div className="min-h-screen bg-gray-50 p-4">
-        <AlertModal />
-        <div className="max-w-2xl mx-auto">
-          <button onClick={voltar} className="text-red-600 mb-4">← Voltar</button>
-          <h2 className="text-2xl font-bold mb-6">Sessões Salvas</h2>
-          {sessoes.length === 0 ? (
-            <p className="text-center text-gray-500 py-12">Nenhuma sessão salva</p>
-          ) : (
-            <div className="space-y-4">
-              {sessoes.map(s => (
-                <div key={s.id} className="bg-white p-4 rounded-lg shadow">
-                  <h3 className="font-semibold">{s.estrutura.titulo}</h3>
-                  <p className="text-sm text-gray-500">{new Date(s.timestamps.criacao).toLocaleString('pt-BR')}</p>
-                  <button onClick={() => reabrirSessao(s.id)} className="w-full mt-3 p-2 bg-red-600 text-white rounded hover:bg-red-700">
-                    {s.status === 'finalizado' ? 'Visualizar' : 'Continuar'}
+            return (
+              <div key={p.id} id={`campo-${p.id}`} className={`mb-6 ${nivel > 0 ? 'ml-6 pl-4 border-l-2 border-gray-300' : ''} ${ehPend ? 'ring-2 ring-red-400 rounded p-2' : ''}`}>
+                <div className="flex items-center gap-2 mb-2">
+                  {erro ? <AlertCircle size={18} className="text-orange-500" /> : val ? <CheckCircle size={18} className="text-green-500" /> : <Circle size={18} className="text-gray-400" />}
+                  <label className="font-medium">{p.texto}{p.obrigatorio && <span className="text-red-500 ml-1">*</span>}</label>
+                </div>
+                {campo}
+                {p.perguntas_condicionais && val && p.perguntas_condicionais[val] && (
+                  <div className="mt-4 space-y-4">{p.perguntas_condicionais[val].map(sub => renderizarCampo(sub, nivel + 1))}</div>
+                )}
+              </div>
+            );
+          };
+
+          const gerarRelatorio = () => {
+            const obrig = [];
+            const verificar = (pergs) => {
+              pergs.forEach(p => {
+                if (p.obrigatorio && !respostas[p.id]?.valor) obrig.push(p.texto);
+                if (p.perguntas_condicionais && respostas[p.id]?.valor) {
+                  const sub = p.perguntas_condicionais[respostas[p.id].valor];
+                  if (sub) verificar(sub);
+                }
+              });
+            };
+            verificar(sessaoAtual.estrutura.perguntas);
+            if (obrig.length > 0) {
+              showAlert(`Campos obrigatórios:\n\n• ${obrig.join('\n• ')}`);
+              setMostrarApenasPendentes(true);
+              return;
+            }
+
+            let rel = '==========================================\n';
+            rel += `RELATÓRIO: ${sessaoAtual.estrutura.titulo.toUpperCase()}\n`;
+            rel += '==========================================\n\n';
+            rel += `Iniciado: ${new Date(sessaoAtual.timestamps.criacao).toLocaleString('pt-BR')}\n`;
+            rel += `Finalizado: ${new Date().toLocaleString('pt-BR')}\n`;
+            rel += `Tempo total: ${formatarTempo((sessaoAtual.tempo_gasto?.total_segundos || 0) + tempoGasto)}\n`;
+            rel += `Técnico: ${respostas.tecnico_interno?.valor || 'N/A'}\n`;
+            rel += `Equipe: ${respostas.nome_equipe?.valor || 'N/A'}\n\n`;
+
+            const formatar = (p) => {
+              const r = respostas[p.id];
+              if (!r?.valor) return '';
+              let txt = `${p.texto}: ${r.valor}\n`;
+              if (p.perguntas_condicionais && p.perguntas_condicionais[r.valor]) {
+                p.perguntas_condicionais[r.valor].forEach(sub => txt += formatar(sub));
+              }
+              return txt;
+            };
+
+            sessaoAtual.estrutura.perguntas.forEach(p => rel += formatar(p));
+            rel += '\n==========================================\n';
+            navigator.clipboard.writeText(rel);
+            setRelatorioGerado(rel);
+          };
+
+          if (tela === 'inicio') {
+            return (
+              <div className="min-h-screen bg-gradient-to-br from-red-50 to-pink-100 p-4">
+                <AlertModal />
+                <RestaurarModal />
+                <div className="max-w-md mx-auto pt-20">
+                  <div className="text-center mb-12">
+                    <FileText size={64} className="mx-auto mb-4 text-red-600" />
+                    <h1 className="text-3xl font-bold mb-2">{APP_NAME}</h1>
+                    <p className="text-gray-600">Sistema offline para visitas técnicas</p>
+                  </div>
+                  <div className="space-y-4">
+                    <button onClick={() => navegarPara('novo_relatorio')} className="w-full p-4 bg-red-600 text-white rounded-lg shadow-lg hover:bg-red-700 flex items-center justify-center gap-3">
+                      <Plus size={24} />Nova Sessão
+                    </button>
+                    <button onClick={async () => { setSessoes(await db.carregarSessoes()); navegarPara('sessoes'); }} className="w-full p-4 bg-white text-red-600 rounded-lg shadow-lg border-2 border-red-600 flex items-center justify-center gap-3">
+                      <FolderOpen size={24} />Reabrir Sessão
+                    </button>
+                    <button onClick={() => navegarPara('configuracoes')} className="w-full p-4 bg-white rounded-lg shadow flex items-center justify-center gap-3">
+                      <Settings size={20} />Configurações
+                    </button>
+                  </div>
+                  <div className="mt-8 text-center text-sm text-gray-500">v{configJSON.versao_atual}</div>
+                </div>
+              </div>
+            );
+          }
+
+          if (tela === 'novo_relatorio') {
+            return (
+              <div className="min-h-screen bg-gray-50 p-4">
+                <AlertModal />
+                <div className="max-w-2xl mx-auto">
+                  <button onClick={voltar} className="text-red-600 mb-4">← Voltar</button>
+                  <h2 className="text-2xl font-bold mb-6">Selecione o tipo de relatório</h2>
+                  <div className="space-y-4">
+                    {Object.entries(configJSON.relatorios).map(([id, r]) => {
+                      const e = r.versoes[r.versao_atual];
+                      return (
+                        <button key={id} onClick={() => iniciarNovaSessao(id)} className="w-full p-6 bg-white rounded-lg shadow hover:shadow-lg text-left">
+                          <h3 className="text-xl font-semibold mb-2">{e.titulo}</h3>
+                          <p className="text-gray-600 text-sm">{e.descricao}</p>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
+            );
+          }
+
+          if (tela === 'configuracoes') {
+            return (
+              <div className="min-h-screen bg-gray-50 p-4">
+                <AlertModal />
+                <div className="max-w-2xl mx-auto">
+                  <button onClick={voltar} className="text-red-600 mb-4">← Voltar</button>
+                  <h2 className="text-2xl font-bold mb-6">Configurações</h2>
+                  <div className="bg-white rounded-lg shadow p-6 mb-4">
+                    <h3 className="font-semibold mb-4">Dados Padrão</h3>
+                    <div className="space-y-4">
+                      <input type="text" placeholder="Nome da Equipe" value={configs.dados_tecnicos.nome_equipe} onChange={(e) => setConfigs({ dados_tecnicos: { ...configs.dados_tecnicos, nome_equipe: e.target.value } })} className="w-full p-2 border rounded" />
+                      <input type="text" placeholder="Técnico" value={configs.dados_tecnicos.tecnico_interno} onChange={(e) => setConfigs({ dados_tecnicos: { ...configs.dados_tecnicos, tecnico_interno: e.target.value } })} className="w-full p-2 border rounded" />
+                      <input type="text" placeholder="Placa" value={configs.dados_tecnicos.placa_veiculo} onChange={(e) => setConfigs({ dados_tecnicos: { ...configs.dados_tecnicos, placa_veiculo: e.target.value } })} className="w-full p-2 border rounded" />
+                      <select value={configs.dados_tecnicos.tipo_veiculo} onChange={(e) => setConfigs({ dados_tecnicos: { ...configs.dados_tecnicos, tipo_veiculo: e.target.value } })} className="w-full p-2 border rounded">
+                        <option value="">Tipo de Veículo</option>
+                        <option>Carro</option>
+                        <option>Moto</option>
+                        <option>Van</option>
+                        <option>Caminhonete</option>
+                      </select>
+                      <button onClick={async () => { await db.salvarConfiguracao('dados_tecnicos', configs.dados_tecnicos); showAlert('✓ Salvo!'); }} className="w-full p-3 bg-red-600 text-white rounded hover:bg-red-700">Salvar</button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            );
+          }
+
+          if (tela === 'formulario' && sessaoAtual) {
+            return (
+              <div className="min-h-screen bg-gray-50">
+                <AlertModal />
+                <div className="bg-white shadow-md sticky top-0 z-10 p-4">
+                  <div className="max-w-4xl mx-auto">
+                    <div className="flex justify-between items-center mb-3">
+                      <button onClick={voltar} className="text-red-600">← Voltar</button>
+                      <div className="flex items-center gap-4">
+                        <div className="flex items-center gap-2 text-sm">
+                          <Clock size={16} />{formatarTempo(tempoGasto)}
+                        </div>
+                        {salvando && <div className="flex items-center gap-2 text-sm text-green-600"><Save size={16} />Salvando...</div>}
+                      </div>
+                    </div>
+                    <h2 className="text-xl font-bold mb-3">{sessaoAtual.estrutura.titulo}</h2>
+                    <div className="flex items-center gap-4">
+                      <input type="checkbox" id="pendentes" checked={mostrarApenasPendentes} onChange={(e) => setMostrarApenasPendentes(e.target.checked)} />
+                      <label htmlFor="pendentes" className="text-sm flex items-center gap-2">
+                        {mostrarApenasPendentes ? <EyeOff size={16} /> : <Eye size={16} />}
+                        Mostrar apenas pendentes
+                      </label>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="max-w-4xl mx-auto p-4">
+                  <div className="bg-white rounded-lg shadow p-6 mb-6">
+                    {sessaoAtual.estrutura.perguntas.map(p => renderizarCampo(p))}
+                  </div>
+                  <button onClick={gerarRelatorio} className="w-full p-4 bg-green-600 text-white rounded-lg shadow-lg hover:bg-green-700 flex items-center justify-center gap-3 mb-20">
+                    <FileText size={24} />Gerar Relatório Final
                   </button>
                 </div>
-              ))}
-            </div>
-          )}
-        </div>
-      </div>
-    );
-  }
 
-  if (tela === 'configuracoes') {
-    return (
-      <div className="min-h-screen bg-gray-50 p-4">
-        <AlertModal />
-        <div className="max-w-2xl mx-auto">
-          <button onClick={voltar} className="text-red-600 mb-4">← Voltar</button>
-          <h2 className="text-2xl font-bold mb-6">Configurações</h2>
-          <div className="bg-white rounded-lg shadow p-6 mb-4">
-            <h3 className="font-semibold mb-4">Dados Padrão</h3>
-            <div className="space-y-4">
-              <input type="text" placeholder="Nome da Equipe" value={configs.dados_tecnicos.nome_equipe} onChange={(e) => setConfigs({ dados_tecnicos: { ...configs.dados_tecnicos, nome_equipe: e.target.value } })} className="w-full p-2 border rounded" />
-              <input type="text" placeholder="Técnico" value={configs.dados_tecnicos.tecnico_interno} onChange={(e) => setConfigs({ dados_tecnicos: { ...configs.dados_tecnicos, tecnico_interno: e.target.value } })} className="w-full p-2 border rounded" />
-              <input type="text" placeholder="Placa" value={configs.dados_tecnicos.placa_veiculo} onChange={(e) => setConfigs({ dados_tecnicos: { ...configs.dados_tecnicos, placa_veiculo: e.target.value } })} className="w-full p-2 border rounded" />
-              <select value={configs.dados_tecnicos.tipo_veiculo} onChange={(e) => setConfigs({ dados_tecnicos: { ...configs.dados_tecnicos, tipo_veiculo: e.target.value } })} className="w-full p-2 border rounded">
-                <option value="">Tipo de Veículo</option>
-                <option>Carro</option>
-                <option>Moto</option>
-                <option>Van</option>
-                <option>Caminhonete</option>
-              </select>
-              <button onClick={async () => { await db.salvarConfiguracao('dados_tecnicos', configs.dados_tecnicos); showAlert('✓ Salvo!'); }} className="w-full p-3 bg-red-600 text-white rounded hover:bg-red-700">Salvar</button>
-            </div>
-          </div>
-          <div className="bg-white rounded-lg shadow p-6 mb-4">
-            <h3 className="font-semibold mb-4">Atualização</h3>
-            <p className="text-sm text-gray-600 mb-2">Versão: {configJSON.versao_atual}</p>
-            <p className="text-sm text-gray-600 mb-3">Última atualização: {new Date(configJSON.data_atualizacao).toLocaleString('pt-BR')}</p>
-            <button onClick={forcarAtualizacao} disabled={salvando} className="w-full p-3 bg-blue-600 text-white rounded hover:bg-blue-700 flex items-center justify-center gap-2">
-              <RefreshCw size={18} className={salvando ? 'animate-spin' : ''} />
-              {salvando ? 'Atualizando...' : 'Forçar Atualização'}
-            </button>
-          </div>
-          <div className="bg-white rounded-lg shadow p-6">
-            <h3 className="font-semibold text-red-600 mb-4">Zona de Perigo</h3>
-            <button onClick={async () => { if (confirm('Apagar TODAS as sessões?')) { const t = await db.carregarSessoes(); for (const s of t) await db.deletarSessao(s.id); showAlert('✓ Sessões apagadas'); } }} className="w-full p-3 bg-red-600 text-white rounded hover:bg-red-700 flex items-center justify-center gap-2">
-              <Trash2 size={18} />Apagar Todas as Sessões
-            </button>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  if (tela === 'formulario' && sessaoAtual) {
-    return (
-      <div className="min-h-screen bg-gray-50">
-        <AlertModal />
-        <div className="bg-white shadow-md sticky top-0 z-10 p-4">
-          <div className="max-w-4xl mx-auto">
-            <div className="flex justify-between items-center mb-3">
-              <button onClick={voltar} className="text-red-600">← Voltar</button>
-              <div className="flex items-center gap-4">
-                <div className="flex items-center gap-2 text-sm">
-                  <Clock size={16} />{formatarTempo(tempoGasto)}
-                </div>
-                {salvando && <div className="flex items-center gap-2 text-sm text-green-600"><Save size={16} />Salvando...</div>}
+                {relatorioGerado && (
+                  <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+                    <div className="bg-white rounded-lg shadow-xl max-w-4xl w-full max-h-[90vh] flex flex-col">
+                      <div className="p-6 border-b">
+                        <div className="flex items-center justify-between mb-2">
+                          <h3 className="text-xl font-semibold">Preview do Relatório</h3>
+                          <button onClick={() => setRelatorioGerado(null)} className="text-gray-500 hover:text-gray-700">✕</button>
+                        </div>
+                        <p className="text-sm text-green-600">✓ Relatório copiado automaticamente para área de transferência!</p>
+                      </div>
+                      <div className="flex-1 overflow-y-auto p-6">
+                        <textarea value={relatorioGerado} readOnly className="w-full h-full min-h-[400px] p-4 border rounded bg-gray-50 font-mono text-sm" style={{ whiteSpace: 'pre-wrap' }} />
+                      </div>
+                      <div className="p-6 border-t flex gap-3">
+                        <button onClick={() => { navigator.clipboard.writeText(relatorioGerado); showAlert('✓ Copiado novamente!'); }} className="flex-1 p-3 bg-blue-600 text-white rounded hover:bg-blue-700 flex items-center justify-center gap-2">
+                          <Copy size={20} />Copiar Novamente
+                        </button>
+                        <button onClick={async () => {
+                          await db.salvarSessao({ ...sessaoAtual, status: 'finalizado', timestamps: { ...sessaoAtual.timestamps, finalizacao: new Date().toISOString() }, tempo_gasto: { total_segundos: (sessaoAtual.tempo_gasto?.total_segundos || 0) + tempoGasto } });
+                          setRelatorioGerado(null);
+                          limparSaveState();
+                        }} className="flex-1 p-3 bg-green-600 text-white rounded hover:bg-green-700 flex items-center justify-center gap-2">
+                          <CheckCircle size={20} />Finalizar e Fechar
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
-            </div>
-            <h2 className="text-xl font-bold mb-3">{sessaoAtual.estrutura.titulo}</h2>
-            <div className="flex items-center gap-4">
-              <input type="checkbox" id="pendentes" checked={mostrarApenasPendentes} onChange={(e) => setMostrarApenasPendentes(e.target.checked)} />
-              <label htmlFor="pendentes" className="text-sm flex items-center gap-2">
-                {mostrarApenasPendentes ? <EyeOff size={16} /> : <Eye size={16} />}
-                Mostrar apenas pendentes
-              </label>
-              <button onClick={irParaPrimeiroPendente} className="ml-4 px-3 py-1 bg-blue-500 text-white rounded text-sm hover:bg-blue-600 flex items-center gap-2">
-                <AlertCircle size={16} />Ir para primeiro pendente
-              </button>
-            </div>
-          </div>
-        </div>
+            );
+          }
 
-        <div className="max-w-4xl mx-auto p-4">
-          <div className="bg-white rounded-lg shadow p-6 mb-6">
-            {sessaoAtual.estrutura.perguntas.map(p => renderizarCampo(p))}
-          </div>
-          <button onClick={gerarRelatorio} className="w-full p-4 bg-green-600 text-white rounded-lg shadow-lg hover:bg-green-700 flex items-center justify-center gap-3 mb-20">
-            <FileText size={24} />Gerar Relatório Final
-          </button>
-        </div>
+          return null;
+        };
 
-        {mostrarAjuda && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-            <div className="bg-white rounded-lg shadow-xl max-w-md w-full p-6">
-              <div className="flex items-center gap-2 mb-4">
-                <HelpCircle size={24} className="text-blue-500" />
-                <h3 className="text-lg font-semibold">{mostrarAjuda.ajuda.titulo}</h3>
-              </div>
-              <div className="text-gray-700 whitespace-pre-line mb-6">{mostrarAjuda.ajuda.conteudo}</div>
-              <button onClick={() => setMostrarAjuda(null)} className="w-full p-2 bg-red-600 text-white rounded hover:bg-red-700">Entendi</button>
-            </div>
-          </div>
-        )}
-
-        {relatorioGerado && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-            <div className="bg-white rounded-lg shadow-xl max-w-4xl w-full max-h-[90vh] flex flex-col">
-              <div className="p-6 border-b">
-                <div className="flex items-center justify-between mb-2">
-                  <h3 className="text-xl font-semibold">Preview do Relatório</h3>
-                  <button onClick={() => setRelatorioGerado(null)} className="text-gray-500 hover:text-gray-700">✕</button>
-                </div>
-                <p className="text-sm text-green-600">✓ Relatório copiado automaticamente para área de transferência!</p>
-              </div>
-              <div className="flex-1 overflow-y-auto p-6">
-                <textarea value={relatorioGerado} readOnly className="w-full h-full min-h-[400px] p-4 border rounded bg-gray-50 font-mono text-sm" style={{ whiteSpace: 'pre-wrap' }} />
-              </div>
-              <div className="p-6 border-t flex gap-3">
-                <button onClick={() => { navigator.clipboard.writeText(relatorioGerado); showAlert('✓ Copiado novamente!'); }} className="flex-1 p-3 bg-blue-600 text-white rounded hover:bg-blue-700 flex items-center justify-center gap-2">
-                  <Copy size={20} />Copiar Novamente
-                </button>
-                <button onClick={() => {
-                  db.salvarSessao({ ...sessaoAtual, status: 'finalizado', timestamps: { ...sessaoAtual.timestamps, finalizacao: new Date().toISOString() }, tempo_gasto: { total_segundos: (sessaoAtual.tempo_gasto?.total_segundos || 0) + tempoGasto } });
-                  setRelatorioGerado(null);
-                  limparSaveState(); // Limpar savestate ao finalizar
-                }} className="flex-1 p-3 bg-green-600 text-white rounded hover:bg-green-700 flex items-center justify-center gap-2">
-                  <CheckCircle size={20} />Finalizar e Fechar
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
-      </div>
-    );
-  }
-
-  return null;
-};
-
-// Removido 'export default App;'
-        
         const container = document.getElementById('root');
         const root = ReactDOM.createRoot(container);
         root.render(<App />);
     </script>
     
     <script>
-        // Registrar Service Worker
         if ('serviceWorker' in navigator) {
             window.addEventListener('load', () => {
-                navigator.serviceWorker.register('/NeoCheckX/app/service-worker.js')
-                    .then(reg => {
-                        console.log('✓ Service Worker registrado:', reg.scope);
-                        
-                        // Verificar atualizações
-                        reg.addEventListener('updatefound', () => {
-                            const newWorker = reg.installing;
-                            newWorker.addEventListener('statechange', () => {
-                                if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
-                                    console.log('Nova versão disponível!');
-                                }
-                            });
-                        });
-                    })
+                const baseUrl = window.location.pathname.includes('/NeoCheckX/') 
+                    ? '/NeoCheckX/' 
+                    : './';
+                navigator.serviceWorker.register(`${baseUrl}service-worker.js`)
+                    .then(reg => console.log('✓ Service Worker registrado:', reg.scope))
                     .catch(err => console.error('✗ Erro ao registrar Service Worker:', err));
             });
         }
     </script>
 </body>
-</html>
+</html

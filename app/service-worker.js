@@ -1,20 +1,20 @@
 const CACHE_NAME = 'neocheckx-v1.3.0';
-const BASE_PATH = '/NeoCheckX'; // Caminho base do GitHub Pages
+
+// Detectar se está no GitHub Pages ou local
+const BASE_PATH = self.location.pathname.includes('/NeoCheckX/') 
+  ? '/NeoCheckX' 
+  : '';
 
 const urlsToCache = [
-  `${BASE_PATH}/app/`,
-  `${BASE_PATH}/app/index.html`,
-  `${BASE_PATH}/app/manifest.json`,
+  `${BASE_PATH}/`,
+  `${BASE_PATH}/index.html`,
+  `${BASE_PATH}/manifest.json`,
   `${BASE_PATH}/relatorios.json`,
   
-  // Corrigido para as versões exatas do index.html
+  // CDN externos
   'https://unpkg.com/react@18.2.0/umd/react.production.min.js',
   'https://unpkg.com/react-dom@18.2.0/umd/react-dom.production.min.js',
-  
-  'https://unpkg.com/@babel/standalone/babel.min.js',
-  
-  'https://unpkg.com/react-dom@18.2.0/umd/react-dom.production.min.js',
-  // Removido 'https://cdn.tailwindcss.com' para evitar erro de CORS
+  'https://unpkg.com/lucide-react@0.378.0/dist/umd/lucide-react.js',
 ];
 
 // Instalação - cacheia recursos
@@ -56,6 +56,12 @@ self.addEventListener('activate', event => {
 self.addEventListener('fetch', event => {
   // Ignorar requisições chrome-extension e outras não HTTP(S)
   if (!event.request.url.startsWith('http')) {
+    return;
+  }
+
+  // Ignorar Tailwind CSS (sempre buscar online)
+  if (event.request.url.includes('cdn.tailwindcss.com')) {
+    event.respondWith(fetch(event.request));
     return;
   }
 

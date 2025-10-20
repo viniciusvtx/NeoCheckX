@@ -2,21 +2,21 @@
   "name": "NeoCheckX - Relatórios Técnicos",
   "short_name": "NeoCheckX",
   "description": "Sistema offline para relatórios de visitas técnicas",
-  "start_url": "/NeoCheckX/app/",
-  "scope": "/NeoCheckX/",
+  "start_url": "./",
+  "scope": "./",
   "display": "standalone",
   "background_color": "#ffffff",
   "theme_color": "#DC2626",
   "orientation": "portrait",
   "icons": [
     {
-      "src": "/NeoCheckX/app/icon-192.png",
+      "src": "./icon-192.png",
       "sizes": "192x192",
       "type": "image/png",
       "purpose": "any maskable"
     },
     {
-      "src": "/NeoCheckX/app/icon-512.png",
+      "src": "./icon-512.png",
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "any maskable"
